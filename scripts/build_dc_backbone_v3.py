@@ -9,6 +9,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, FancyBboxPatch, Circle, Polygon, FancyArrowPatch
 from matplotlib.lines import Line2D
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -527,7 +528,7 @@ figure1()
 
 # Figure 2
 def figure2():
-    fig,axes=plt.subplots(2,2,figsize=(11,8),gridspec_kw={'width_ratios':[1,1.15]})
+    fig,axes=plt.subplots(2,2,figsize=(11,8),gridspec_kw={'width_ratios':[1,1], 'height_ratios':[1,1]})
     colors={'Traditional AC':'#377eb8','Local SST':'#984ea3','Subtransmission DC backbone':'#e6550d'}
     component_colors={'corridor':'#9aa3a6','conversion':'#80cdc1'}
     order=['Traditional AC','Local SST','Subtransmission DC backbone']
@@ -553,7 +554,8 @@ def figure2():
     ax.set_ylabel('Loss under uncertainty (MW)'); ax.set_title('b  Reference-case uncertainty',loc='left',fontsize=11,weight='bold'); ax.grid(axis='y',alpha=0.25)
     trad_p50=np.median(data[0])
     ax.axhline(trad_p50,color=colors['Traditional AC'],lw=0.8,ls='--',alpha=0.55)
-    ax.text(4.46,trad_p50+0.7,'Traditional AC p50',ha='right',fontsize=6.3,color=colors['Traditional AC'])
+    ax.set_xlim(0.5,len(order)+0.5)
+    ax.text(len(order)+0.40,trad_p50+0.7,'Traditional AC p50',ha='right',fontsize=6.3,color=colors['Traditional AC'])
     for i,d in enumerate(data, start=1):
         med=np.median(d); p95=np.percentile(d,95)
         ax.text(i, p95+1.0, f'p50 {med:.1f}\np95 {p95:.1f}', ha='center', fontsize=6.6)
@@ -566,7 +568,11 @@ def figure2():
                 arrowprops=dict(arrowstyle='-',color='0.25',lw=0.8),ha='left',va='center',
                 bbox=dict(boxstyle='round,pad=0.16',facecolor='white',edgecolor='0.82',alpha=0.86))
     ax.set_xlabel('Cluster load (MW)'); ax.set_ylabel('Corridor length (km)'); ax.set_title('c  DC saving over traditional AC',loc='left',fontsize=11,weight='bold')
-    cb=fig.colorbar(im,ax=ax,shrink=0.86); cb.set_label('MW saved')
+    cax=inset_axes(ax,width='32%',height='3.4%',loc='lower right',
+                   bbox_to_anchor=(-0.05,0.08,1,1),bbox_transform=ax.transAxes,borderpad=0)
+    cb=fig.colorbar(im,cax=cax,orientation='horizontal'); cb.set_label('MW saved',fontsize=6.5,labelpad=1)
+    cb.ax.xaxis.set_label_position('top')
+    cb.ax.tick_params(labelsize=6)
     ax=axes[1,1]
     tmp=sens_df.copy(); tmp['span']=abs(tmp['high_case_saving_MW']-tmp['low_case_saving_MW']); tmp=tmp.sort_values('span')
     y=np.arange(len(tmp))
@@ -578,7 +584,8 @@ def figure2():
                 ha='right',va='center',arrowprops=dict(arrowstyle='-',color='#e6550d',lw=0.9))
     ax.set_yticks(y); ax.set_yticklabels(tmp['parameter'],fontsize=7)
     ax.set_xlabel('Saving vs traditional AC (MW)'); ax.set_title('d  One-at-a-time sensitivity',loc='left',fontsize=11,weight='bold'); ax.grid(axis='x',alpha=0.25)
-    fig.tight_layout(); savefig(fig,'fig2_efficiency_uncertainty_designspace_v3')
+    fig.subplots_adjust(left=0.07,right=0.98,bottom=0.08,top=0.93,wspace=0.38,hspace=0.38)
+    savefig(fig,'fig2_efficiency_uncertainty_designspace_v3')
 figure2()
 
 # Figure 3
