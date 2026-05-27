@@ -7,7 +7,7 @@ Reference DC voltage,"+/-138 kV, or 276 kV pole-to-pole",representative DC desig
 Conductor resistance,0.01 ohm/km per phase or pole,screening assumption,this study
 Traditional downstream efficiency,0.991 x 0.982 = 97.32%,central loss assumption,this study
 Local SST efficiency,98.5%,central local-SST assumption,this study
-99% local-SST upper-bound comparator,99.0%,strong local-SST baseline,"this study, motivated by high-efficiency SiC conversion evidence"
+99% local-SST efficiency sensitivity,99.0%,"sensitivity case, not a demonstrated reference architecture",this study sensitivity assumption
 DC terminal AC/DC efficiency,99.4%,central DC-backbone assumption,this study
 Subtransmission-to-34.5 kV DC/DC efficiency,99.4%,central DC-backbone assumption,this study
 34.5 kV/800 V DC/DC efficiency,99.2%,central DC-backbone assumption,this study

@@ -41,7 +41,7 @@ assumptions = {
     'line_resistance_ohm_per_km_phase_or_pole': 0.010,
     'traditional_downstream_efficiency': 0.991*0.982,
     'local_sst_efficiency': 0.985,
-    'local_sst_strong_efficiency': 0.990,
+    'local_sst_sensitivity_efficiency': 0.990,
     'dc_terminal_acdc_efficiency': 0.994,
     'dc_stage1_efficiency': 0.994,
     'dc_stage2_efficiency': 0.992,
@@ -82,11 +82,11 @@ def losses_eff(load_MW=1000, length_km=20, r_ohm_km=0.01, pf=0.98,
     }
 
 ref = losses_eff()
-ref_strong = losses_eff(sst_eff=assumptions['local_sst_strong_efficiency'])
+ref_sens = losses_eff(sst_eff=assumptions['local_sst_sensitivity_efficiency'])
 ref_rows=[]
 for k,v in ref.items():
     ref_rows.append({'architecture':k, **v})
-ref_rows.append({'architecture':'Local SST optimistic', **ref_strong['Local SST']})
+ref_rows.append({'architecture':'Local SST 99pct sensitivity', **ref_sens['Local SST']})
 ref_df=pd.DataFrame(ref_rows)
 ref_df['annual_loss_GWh_at_90pct_LF']=ref_df['loss_MW']*8760*0.90/1000
 ref_df.to_csv(DATA/'efficiency_reference_case_v3.csv', index=False)
@@ -97,15 +97,15 @@ rows=[]
 for L in loads:
     for d in lengths:
         r=losses_eff(L,d)
-        r_strong=losses_eff(L,d,sst_eff=assumptions['local_sst_strong_efficiency'])
+        r_sens=losses_eff(L,d,sst_eff=assumptions['local_sst_sensitivity_efficiency'])
         rows.append({'load_MW':L,'length_km':d,
                      'saving_vs_traditional_MW':r['Traditional AC']['loss_MW']-r['Subtransmission DC backbone']['loss_MW'],
                      'saving_vs_local_sst_MW':r['Local SST']['loss_MW']-r['Subtransmission DC backbone']['loss_MW'],
-                     'saving_vs_optimistic_local_sst_MW':r_strong['Local SST']['loss_MW']-r['Subtransmission DC backbone']['loss_MW'],
+                     'saving_vs_99pct_local_sst_sensitivity_MW':r_sens['Local SST']['loss_MW']-r['Subtransmission DC backbone']['loss_MW'],
                      'dc_loss_MW':r['Subtransmission DC backbone']['loss_MW'],
                      'traditional_loss_MW':r['Traditional AC']['loss_MW'],
                      'local_sst_loss_MW':r['Local SST']['loss_MW'],
-                     'local_sst_optimistic_loss_MW':r_strong['Local SST']['loss_MW']})
+                     'local_sst_99pct_sensitivity_loss_MW':r_sens['Local SST']['loss_MW']})
 design_df=pd.DataFrame(rows); design_df.to_csv(DATA/'efficiency_design_space_v3.csv', index=False)
 
 # Monte Carlo uncertainty
@@ -120,10 +120,10 @@ for i in range(8000):
     dc2 = rng.triangular(0.985,0.992,0.996)
     length = rng.triangular(10,20,50)
     res=losses_eff(1000,length,r,pf,trad_eff,sst_eff,dc_term,dc1,dc2)
-    res_strong=losses_eff(1000,length,r,pf,trad_eff,0.990,dc_term,dc1,dc2)
+    res_sens=losses_eff(1000,length,r,pf,trad_eff,0.990,dc_term,dc1,dc2)
     mc.append({'traditional_loss_MW':res['Traditional AC']['loss_MW'],
                'local_sst_loss_MW':res['Local SST']['loss_MW'],
-               'local_sst_optimistic_loss_MW':res_strong['Local SST']['loss_MW'],
+               'local_sst_99pct_sensitivity_loss_MW':res_sens['Local SST']['loss_MW'],
                'dc_loss_MW':res['Subtransmission DC backbone']['loss_MW'],
                'saving_vs_traditional_MW':res['Traditional AC']['loss_MW']-res['Subtransmission DC backbone']['loss_MW'],
                'saving_vs_local_sst_MW':res['Local SST']['loss_MW']-res['Subtransmission DC backbone']['loss_MW'],
@@ -528,7 +528,7 @@ figure1()
 # Figure 2
 def figure2():
     fig,axes=plt.subplots(2,2,figsize=(11,8),gridspec_kw={'width_ratios':[1,1.15]})
-    colors={'Traditional AC':'#377eb8','Local SST':'#984ea3','Local SST optimistic':'#bc80bd','Subtransmission DC backbone':'#e6550d'}
+    colors={'Traditional AC':'#377eb8','Local SST':'#984ea3','Subtransmission DC backbone':'#e6550d'}
     component_colors={'corridor':'#9aa3a6','conversion':'#80cdc1'}
     order=['Traditional AC','Local SST','Subtransmission DC backbone']
     ax=axes[0,0]
@@ -812,7 +812,7 @@ def figure_s4():
 figure_s4()
 
 # ---------------------------- Manuscript text ----------------------------
-abstract = """AI factories are becoming synchronized, DC-native, gigawatt-scale loads, while surrounding grids still treat them as passive AC buildings. This mismatch raises a planning question: if the useful electrical boundary is 800 VDC, where should the AC/DC boundary sit? We compare traditional AC delivery, AC corridors with local solid-state transformers and a utility-operated subtransmission DC backbone feeding 34.5 kV DC distribution and 800 VDC interfaces. In a 1 GW, 20 km, three-campus reference case, the DC backbone delivers 97.49% end-to-end efficiency to the 800 VDC boundary, compared with 96.23% for traditional AC and 97.42% for local SSTs. Efficiency alone is not the main result. Moving the boundary upstream also centralizes AC harmonic ownership and buffers synchronized training dynamics, reducing the 95th-percentile harmonic-voltage screening metric from 3.95% to 0.78% and reducing 0.1-20 Hz grid-side spectral energy to 5.9% of the AC baseline. Sensitivity, stronger baselines, direct OpenDSS harmonic solves, averaged EMT-style dynamics, protection screening and a reproducibility package support a falsifiable systems claim: for clustered AI factories, the AC/DC boundary is a subtransmission planning variable rather than only a building-level design choice."""
+abstract = """AI factories are becoming synchronized, DC-native, gigawatt-scale loads, while surrounding grids still treat them as passive AC buildings. This mismatch raises a planning question: if the useful electrical boundary is 800 VDC, where should the AC/DC boundary sit? We compare traditional AC delivery, AC corridors with local solid-state transformers and a utility-operated subtransmission DC backbone feeding 34.5 kV DC distribution and 800 VDC interfaces. In a 1 GW, 20 km, three-campus reference case, the DC backbone delivers 97.49% end-to-end efficiency to the 800 VDC boundary, compared with 96.23% for traditional AC and 97.42% for local SSTs. Efficiency alone is not the main result. Moving the boundary upstream also centralizes AC harmonic ownership and buffers synchronized training dynamics, reducing the 95th-percentile harmonic-voltage screening metric from 3.95% to 0.78% and reducing 0.1-20 Hz grid-side spectral energy to 5.9% of the AC baseline. Sensitivity analyses, direct OpenDSS harmonic solves, averaged EMT-style dynamics, protection screening and a reproducibility package support a falsifiable systems claim: for clustered AI factories, the AC/DC boundary is a subtransmission planning variable rather than only a building-level design choice."""
 
 intro = """AI factories change the electrical problem that grids must solve. A conventional data center can often be approximated in planning studies as a large but mostly passive load. A modern AI factory is a synchronized computing machine. Training iterations, all-reduce communication, checkpointing and accelerator power-management events can appear electrically as coherent power modulation across thousands of GPUs. At the scale of multiple campuses connected to the same grid pocket, power delivery becomes part of the computing architecture.
 
@@ -832,9 +832,9 @@ results_sections = [
 The conceptual difference is the electrical boundary seen by the utility. In the first two architectures, each campus remains an AC-facing load with its own grid-interfacing converter behaviour. In the proposed architecture, the AC grid sees one controlled converter terminal, while campus converters are DC/DC devices embedded behind a shared DC backbone. This turns a cluster of AI campuses from a set of distributed harmonic and ramp sources into a coordinated DC-native load pocket."""),
 ("Efficiency is a design-space result, not a single operating point", """For a central reference case, we model a 1 GW cluster served over a 20 km reinforced subtransmission corridor. The traditional AC case uses 138 kV line-to-line at 0.98 power factor; the proposed DC case uses a +/-138 kV bipole, or 276 kV pole-to-pole. This is a representative voltage class rather than a prescribed standard.
 
-With an effective conductor resistance of 0.01 ohm km-1 per phase or pole, the central model gives total losses of 39.1 MW for traditional AC, 26.5 MW for local SSTs, 21.3 MW for a 99.0%-efficient local-SST upper-bound comparator and 25.7 MW for the DC backbone (Fig. 2a). The corresponding end-to-end efficiencies are 96.23%, 97.42%, 97.92% and 97.49%. This stronger baseline is deliberately included because the architectural claim should not depend on a narrow efficiency comparison.
+With an effective conductor resistance of 0.01 ohm km-1 per phase or pole, the central model gives total losses of 39.1 MW for traditional AC, 26.5 MW for local SSTs and 25.7 MW for the DC backbone (Fig. 2a). The corresponding end-to-end efficiencies are 96.23%, 97.42% and 97.49%. A separate 99.0% local-SST efficiency sensitivity gives 21.3 MW loss and 97.92% end-to-end efficiency; this is treated only as a sensitivity case, not as a demonstrated reference architecture.
 
-The efficiency result alone would not justify a new grid architecture. In the optimistic SST case, local conversion can exceed the DC backbone in pure efficiency. The architectural case emerges because the DC backbone produces an efficiency improvement over traditional AC in the same direction as harmonic ownership and dynamic-voltage benefits. A load-distance sweep from 100 MW to 3 GW and from 5 to 100 km shows where the DC advantage over traditional AC exceeds 10, 50 and 100 MW (Fig. 2c). A Monte Carlo uncertainty sweep and one-at-a-time tornado analysis show that corridor length, conductor resistance and downstream conversion assumptions dominate the quantitative result (Fig. 2b,d)."""),
+The efficiency result alone would not justify a new grid architecture. Under the 99.0% local-SST sensitivity case, local conversion can exceed the DC backbone in pure efficiency. The architectural case emerges because the DC backbone produces an efficiency improvement over traditional AC in the same direction as harmonic ownership and dynamic-voltage benefits. A load-distance sweep from 100 MW to 3 GW and from 5 to 100 km shows where the DC advantage over traditional AC exceeds 10, 50 and 100 MW (Fig. 2c). A Monte Carlo uncertainty sweep and one-at-a-time tornado analysis show that corridor length, conductor resistance and downstream conversion assumptions dominate the quantitative result (Fig. 2b,d)."""),
 ("A DC backbone changes harmonic compliance into harmonic ownership", """Traditional AC and local-SST architectures can be designed to meet harmonic limits, but they place multiple large AC-facing converter interfaces along the corridor. Their aggregate harmonic voltage distortion depends on local filters, network impedance, cable capacitance, phase relationships between sites and resonance. The proposed DC backbone concentrates the AC-facing converter at a single utility-operated terminal. Campus stations are DC/DC interfaces and therefore do not directly inject AC harmonics into the subtransmission grid.
 
 We quantify this ownership change with an OpenDSS-ready network and a reproduced nodal frequency-domain solver. The network uses a 10 GVA Thevenin short-circuit strength at 138 kV, three campus buses along a 20 km corridor, harmonic-dependent source impedance and resonance amplification around selected orders. Distributed architectures are represented by three AC-facing converter spectra with random relative phases; the DC-backbone case is represented by one filtered grid-facing converter terminal.
@@ -851,7 +851,7 @@ The voltage-class envelope in Fig. 5b shows why the paper uses +/-138 kV only as
 
 discussion = """Our results do not imply that every data center should be served by DC subtransmission, or that +/-138 kV is a universal optimum. They show that once AI factories become clustered, synchronized and DC-native, the location of the AC/DC boundary becomes a planning variable. This creates a new design space for utility-operated DC load pockets, where conversion efficiency, harmonic ownership and dynamic buffering are optimized together.
 
-The comparison also shows why efficiency alone is an incomplete criterion. Local SSTs can approach or exceed the DC backbone in pure efficiency under optimistic assumptions. Their limitation is architectural: they retain multiple AC-facing grid interfaces and do not automatically provide a shared DC layer for buffering synchronized multi-campus load dynamics. The proposed backbone is valuable because the three benefits are co-located at one controllable boundary.
+The comparison also shows why efficiency alone is an incomplete criterion. A high-efficiency local-SST sensitivity case can approach or exceed the DC backbone in pure efficiency, but it does not change the architecture. Local SSTs retain multiple AC-facing grid interfaces and do not automatically provide a shared DC layer for buffering synchronized multi-campus load dynamics. The proposed backbone is valuable because the three benefits are co-located at one controllable boundary.
 
 Several technical risks remain. DC protection, pole-to-ground fault detection, hybrid DC breakers, grounding, insulation coordination, converter interoperability and electromagnetic-transient stability must be demonstrated before deployment. We include protection-screening dynamics and an averaged EMT model to make the research boundary explicit, but do not claim a finished hardware design. The decisive follow-up is pilot-grade EMT and hardware-in-the-loop validation of the grid-facing terminal, DC/DC stations and AI-load emulator.
 
@@ -859,14 +859,14 @@ This study reframes AI factories as grid-planning objects rather than only build
 
 methods = [
 ("Architecture boundary", """The evaluation boundary begins at the grid-facing/subtransmission supply point and ends at the 800 VDC data-center interface. The traditional AC case uses a 138 kV AC corridor and downstream AC distribution before conversion to 800 VDC. The local-SST case uses the same AC corridor but converts at each campus using an SST. The proposed case uses a grid-facing AC/DC terminal, a bipolar subtransmission DC corridor, DC/DC conversion to a 34.5 kV DC distribution layer and DC/DC conversion to 800 VDC. The central reference system is a 1 GW three-campus cluster served over a 20 km equivalent corridor. The DC design point is +/-138 kV, or 276 kV pole-to-pole."""),
-("Efficiency calculation", """For AC cases, the receiving-end corridor power is P_recv = P/eta_downstream, where P is the useful 800 VDC load and eta_downstream is the downstream conversion efficiency. Corridor current is I_AC = P_recv/(sqrt(3) V_LL pf), AC line loss is 3 I_AC^2 R, grid input is P_recv plus line loss, and total loss is grid input minus P. For the DC case, receiving-end corridor power is P_recv = P/(eta_DC/DC,1 eta_DC/DC,2), bipole current is I_DC = P_recv/V_pp, line loss is 2 I_DC^2 R, grid input is (P_recv plus line loss)/eta_AC/DC, and total loss is grid input minus P. Central assumptions, including the 99.0%-efficient local-SST upper-bound comparator, are listed in Supplementary Table 1, and uncertainty ranges are encoded in the public repository."""),
+("Efficiency calculation", """For AC cases, the receiving-end corridor power is P_recv = P/eta_downstream, where P is the useful 800 VDC load and eta_downstream is the downstream conversion efficiency. Corridor current is I_AC = P_recv/(sqrt(3) V_LL pf), AC line loss is 3 I_AC^2 R, grid input is P_recv plus line loss, and total loss is grid input minus P. For the DC case, receiving-end corridor power is P_recv = P/(eta_DC/DC,1 eta_DC/DC,2), bipole current is I_DC = P_recv/V_pp, line loss is 2 I_DC^2 R, grid input is (P_recv plus line loss)/eta_AC/DC, and total loss is grid input minus P. Central assumptions and the 99.0% local-SST efficiency sensitivity case are listed in Supplementary Table 1, and uncertainty ranges are encoded in the public repository."""),
 ("Harmonic screening and OpenDSS-ready network", """The harmonic model is a frequency-domain screening model. It represents the 138 kV grid by a 10 GVA Thevenin short-circuit strength, three corridor buses and harmonic-dependent source impedance with resonance amplification. OpenDSS-compatible circuit files and archived OpenDSSDirect.py harmonic-run artifacts are included in the repository. The figure-generation script also includes an independent nodal-frequency solver that uses the same equivalent network and harmonic spectra, so the screening result can be reproduced without a proprietary EMT tool. The output metrics are PCC voltage THD and individual harmonic voltage distortion. Parameter provenance is summarized in Supplementary Table 1; measured literature values, public planning data and study assumptions are separated in the public data tables."""),
 ("Averaged EMT-style model", """The dynamic waveform is synthetic but parameterized from the published structure of AI training power traces: compute phases with high accelerator utilization, periodic communication dips and less frequent checkpointing dips [7]. The traditional AC case passes the waveform directly to the grid. The local-SST case applies a 1.1 s first-order smoothing function. The DC-backbone case applies a 16 s grid-facing power command; the difference between the AI load and the commanded grid power defines shared DC-buffer power. Supplementary Note 2 gives the averaged state equations and validates the first-order command model by time-step convergence and transfer-function tests. This is an averaged EMT-style comparison of architecture-level exposure, not a switching EMT validation of a specific converter design."""),
 ("Protection-zone screening", """Representative protection dynamics are simulated for a backbone pole-to-ground fault and a campus DC/DC internal fault. The model includes detection, converter current limiting, breaker opening, section isolation and healthy-campus re-energization. It is intended to check plausibility and expose the required protection functions; it is not a validated DC-breaker or insulation-coordination design.""")]
 
 figure_legends = {
 'Fig. 1 | Three power-delivery architectures for AI factories.':'Orange lines denote AC sections and blue lines denote DC sections. a, Traditional AC delivery keeps AC in the subtransmission and facility distribution system before conversion to the 800 VDC data-center boundary. b, Local SST delivery uses the same AC corridor but converts at each AI campus, with AC input and DC output shown explicitly. c, The proposed architecture moves the AC/DC boundary upstream and feeds multiple campuses from a utility-operated subtransmission DC backbone, with DC/DC conversion to 34.5 kV DC and then to 800 VDC.',
-'Fig. 2 | Efficiency, uncertainty and design space.':'a, Central 1 GW, 20 km reference-case corridor and conversion losses with end-to-end efficiencies to the 800 VDC boundary; bar colours denote loss components, not AC/DC sections. b, Monte Carlo uncertainty at the reference point. c, Load-distance sweep showing where the DC-backbone loss advantage over traditional AC exceeds 10, 50 and 100 MW. d, One-at-a-time sensitivity of the central saving. A 99.0%-efficient local-SST upper-bound comparator is reported in the text and Supplementary Table 1.',
+'Fig. 2 | Efficiency, uncertainty and design space.':'a, Central 1 GW, 20 km reference-case corridor and conversion losses with end-to-end efficiencies to the 800 VDC boundary; bar colours denote loss components, not AC/DC sections. b, Monte Carlo uncertainty at the reference point. c, Load-distance sweep showing where the DC-backbone loss advantage over traditional AC exceeds 10, 50 and 100 MW. d, One-at-a-time sensitivity of the central saving. A 99.0% local-SST efficiency sensitivity case is reported in the text and Supplementary Table 1.',
 'Fig. 3 | Harmonic ownership and OpenDSS-ready screening.':'a, Harmonic ownership boundary for distributed AC-facing converter cases versus the proposed single utility AC/DC terminal. b, Monte Carlo PCC voltage THD for the three architectures and two stronger baselines, with a 5% planning guide shown for context. c, 95th-percentile individual harmonic voltage distortion. d, Direct OpenDSS harmonic solve compared with the internal nodal-frequency solver.',
 'Fig. 4 | Voltage stabilization of synchronized AI training loads.':'a, Representative AI training waveform and grid-facing power trajectories. b, Frequency-domain attenuation of grid-side power fluctuations. c, Normalized 0.1-20 Hz spectral magnitude and 99th-percentile ramp rate. d, Shared DC-buffer power and energy window required for the reference waveform.',
 'Fig. 5 | Data-center load pockets and voltage-class envelope.':'a, Public planning-data precedent showing multi-GW load-pocket growth. b, Bipole current as a function of cluster load for several candidate DC voltage classes, with the public planning range shown for context.'}
@@ -950,7 +950,7 @@ prov=pd.DataFrame([
     {'parameter':'Conductor resistance','value':'0.01 ohm/km per phase or pole','role':'screening assumption','source':'this study'},
     {'parameter':'Traditional downstream efficiency','value':'0.991 x 0.982 = 97.32%','role':'central loss assumption','source':'this study'},
     {'parameter':'Local SST efficiency','value':'98.5%','role':'central local-SST assumption','source':'this study'},
-    {'parameter':'99% local-SST upper-bound comparator','value':'99.0%','role':'strong local-SST baseline','source':'this study, motivated by high-efficiency SiC conversion evidence'},
+    {'parameter':'99% local-SST efficiency sensitivity','value':'99.0%','role':'sensitivity case, not a demonstrated reference architecture','source':'this study sensitivity assumption'},
     {'parameter':'DC terminal AC/DC efficiency','value':'99.4%','role':'central DC-backbone assumption','source':'this study'},
     {'parameter':'Subtransmission-to-34.5 kV DC/DC efficiency','value':'99.4%','role':'central DC-backbone assumption','source':'this study'},
     {'parameter':'34.5 kV/800 V DC/DC efficiency','value':'99.2%','role':'central DC-backbone assumption','source':'this study'},
