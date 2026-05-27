@@ -529,6 +529,7 @@ figure1()
 def figure2():
     fig,axes=plt.subplots(2,2,figsize=(11,8),gridspec_kw={'width_ratios':[1,1.15]})
     colors={'Traditional AC':'#377eb8','Local SST':'#984ea3','Local SST optimistic':'#bc80bd','Subtransmission DC backbone':'#e6550d'}
+    component_colors={'corridor':'#9aa3a6','conversion':'#80cdc1'}
     order=['Traditional AC','Local SST','Local SST optimistic','Subtransmission DC backbone']
     ax=axes[0,0]
     ref_idx=ref_df.set_index('architecture')
@@ -536,10 +537,11 @@ def figure2():
     conversion=[ref_idx.loc[o,'conversion_MW'] for o in order]
     vals=[ref_idx.loc[o,'loss_MW'] for o in order]
     x=np.arange(len(order))
-    ax.bar(x, corridor, color='#9ecae1', alpha=0.92, label='corridor')
-    ax.bar(x, conversion, bottom=corridor, color='#fdae6b', alpha=0.92, label='conversion')
+    ax.bar(x, corridor, color=component_colors['corridor'], alpha=0.92, label='corridor')
+    ax.bar(x, conversion, bottom=corridor, color=component_colors['conversion'], alpha=0.92, label='conversion')
     ax.set_xticks(range(len(order))); ax.set_xticklabels(['Traditional\nAC','Local\nSST','Optimistic\nSST','DC\nbackbone'],fontsize=7)
-    ax.set_ylabel('Loss at 1 GW (MW)'); ax.set_title('a  Reference loss decomposition',loc='left',fontsize=11,weight='bold')
+    ax.set_ylabel('Loss at 1 GW, 20 km (MW)'); ax.set_title('a  Reference loss decomposition',loc='left',fontsize=11,weight='bold')
+    ax.set_ylim(0, max(vals)+5.1)
     for i,v in enumerate(vals): ax.text(i,v+0.8,f'{v:.1f} MW\n{ref_idx.loc[order[i],"eff"]*100:.2f}%',ha='center',fontsize=7)
     ax.legend(fontsize=7,frameon=False,loc='upper right')
     ax.grid(axis='y',alpha=0.25)
@@ -549,6 +551,9 @@ def figure2():
     for pc,c in zip(parts['bodies'],[colors[o] for o in order]): pc.set_facecolor(c); pc.set_edgecolor(c); pc.set_alpha(0.45)
     ax.set_xticks(range(1,len(order)+1)); ax.set_xticklabels(['Traditional\nAC','Local\nSST','Optimistic\nSST','DC\nbackbone'],fontsize=7)
     ax.set_ylabel('Loss under uncertainty (MW)'); ax.set_title('b  Uncertainty and stronger SST baseline',loc='left',fontsize=11,weight='bold'); ax.grid(axis='y',alpha=0.25)
+    trad_p50=np.median(data[0])
+    ax.axhline(trad_p50,color=colors['Traditional AC'],lw=0.8,ls='--',alpha=0.55)
+    ax.text(4.46,trad_p50+0.7,'Traditional AC p50',ha='right',fontsize=6.3,color=colors['Traditional AC'])
     for i,d in enumerate(data, start=1):
         med=np.median(d); p95=np.percentile(d,95)
         ax.text(i, p95+1.0, f'p50 {med:.1f}\np95 {p95:.1f}', ha='center', fontsize=6.6)
@@ -557,6 +562,9 @@ def figure2():
     im=ax.imshow(pivot.values,origin='lower',aspect='auto',extent=[loads.min(),loads.max(),lengths.min(),lengths.max()],cmap='YlOrRd')
     cs=ax.contour(loads,lengths,pivot.values,levels=[10,50,100],colors='k',linewidths=0.8); ax.clabel(cs,fmt='%d MW',fontsize=7)
     ax.scatter([1000],[20],c='white',edgecolors='black',s=40,zorder=3)
+    ax.annotate('reference\n1 GW, 20 km',xy=(1000,20),xytext=(1210,28),fontsize=6.7,
+                arrowprops=dict(arrowstyle='-',color='0.25',lw=0.8),ha='left',va='center',
+                bbox=dict(boxstyle='round,pad=0.16',facecolor='white',edgecolor='0.82',alpha=0.86))
     ax.set_xlabel('Cluster load (MW)'); ax.set_ylabel('Corridor length (km)'); ax.set_title('c  DC saving over traditional AC',loc='left',fontsize=11,weight='bold')
     cb=fig.colorbar(im,ax=ax,shrink=0.86); cb.set_label('MW saved')
     ax=axes[1,1]
@@ -564,7 +572,10 @@ def figure2():
     y=np.arange(len(tmp))
     ax.hlines(y,tmp['low_case_saving_MW'],tmp['high_case_saving_MW'],color='#636363',lw=5,alpha=0.7)
     ax.axvline(base_saving,color='#e6550d',lw=1.5,label='base')
-    ax.text(base_saving+0.35,0.04,f'base {base_saving:.1f} MW',transform=ax.get_xaxis_transform(),fontsize=7,color='#e6550d',va='bottom')
+    ax.set_ylim(-0.55,len(tmp)-0.15)
+    ax.annotate(f'base saving = {base_saving:.1f} MW',xy=(base_saving,len(tmp)-0.32),
+                xytext=(base_saving-1.15,len(tmp)-0.32),fontsize=7,color='#e6550d',
+                ha='right',va='center',arrowprops=dict(arrowstyle='-',color='#e6550d',lw=0.9))
     ax.set_yticks(y); ax.set_yticklabels(tmp['parameter'],fontsize=7)
     ax.set_xlabel('Saving vs traditional AC (MW)'); ax.set_title('d  One-at-a-time sensitivity',loc='left',fontsize=11,weight='bold'); ax.grid(axis='x',alpha=0.25)
     fig.tight_layout(); savefig(fig,'fig2_efficiency_uncertainty_designspace_v3')
@@ -821,7 +832,7 @@ results_sections = [
 The conceptual difference is the electrical boundary seen by the utility. In the first two architectures, each campus remains an AC-facing load with its own grid-interfacing converter behaviour. In the proposed architecture, the AC grid sees one controlled converter terminal, while campus converters are DC/DC devices embedded behind a shared DC backbone. This turns a cluster of AI campuses from a set of distributed harmonic and ramp sources into a coordinated DC-native load pocket."""),
 ("Efficiency is a design-space result, not a single operating point", """For a central reference case, we model a 1 GW cluster served over a 20 km reinforced subtransmission corridor. The traditional AC case uses 138 kV line-to-line at 0.98 power factor; the proposed DC case uses a +/-138 kV bipole, or 276 kV pole-to-pole. This is a representative voltage class rather than a prescribed standard.
 
-With an effective conductor resistance of 0.01 ohm km-1 per phase or pole, the central model gives total losses of 39.1 MW for traditional AC, 26.5 MW for local SSTs, 21.4 MW for an intentionally optimistic 99.0%-efficient local SST baseline and 25.7 MW for the DC backbone (Fig. 2a). The corresponding end-to-end efficiencies are 96.23%, 97.42%, 97.91% and 97.49%. This stronger baseline is deliberately included because the architectural claim should not depend on a narrow efficiency comparison.
+With an effective conductor resistance of 0.01 ohm km-1 per phase or pole, the central model gives total losses of 39.1 MW for traditional AC, 26.5 MW for local SSTs, 21.3 MW for an intentionally optimistic 99.0%-efficient local SST baseline and 25.7 MW for the DC backbone (Fig. 2a). The corresponding end-to-end efficiencies are 96.23%, 97.42%, 97.92% and 97.49%. This stronger baseline is deliberately included because the architectural claim should not depend on a narrow efficiency comparison.
 
 The efficiency result alone would not justify a new grid architecture. In the optimistic SST case, local conversion can exceed the DC backbone in pure efficiency. The architectural case emerges because the DC backbone produces an efficiency improvement over traditional AC in the same direction as harmonic ownership and dynamic-voltage benefits. A load-distance sweep from 100 MW to 3 GW and from 5 to 100 km shows where the DC advantage over traditional AC exceeds 10, 50 and 100 MW (Fig. 2c). A Monte Carlo uncertainty sweep and one-at-a-time tornado analysis show that corridor length, conductor resistance and downstream conversion assumptions dominate the quantitative result (Fig. 2b,d)."""),
 ("A DC backbone changes harmonic compliance into harmonic ownership", """Traditional AC and local-SST architectures can be designed to meet harmonic limits, but they place multiple large AC-facing converter interfaces along the corridor. Their aggregate harmonic voltage distortion depends on local filters, network impedance, cable capacitance, phase relationships between sites and resonance. The proposed DC backbone concentrates the AC-facing converter at a single utility-operated terminal. Campus stations are DC/DC interfaces and therefore do not directly inject AC harmonics into the subtransmission grid.
@@ -855,7 +866,7 @@ methods = [
 
 figure_legends = {
 'Fig. 1 | Three power-delivery architectures for AI factories.':'Orange lines denote AC sections and blue lines denote DC sections. a, Traditional AC delivery keeps AC in the subtransmission and facility distribution system before conversion to the 800 VDC data-center boundary. b, Local SST delivery uses the same AC corridor but converts at each AI campus, with AC input and DC output shown explicitly. c, The proposed architecture moves the AC/DC boundary upstream and feeds multiple campuses from a utility-operated subtransmission DC backbone, with DC/DC conversion to 34.5 kV DC and then to 800 VDC.',
-'Fig. 2 | Efficiency, stronger baselines and design space.':'a, Central 1 GW, 20 km reference-case corridor and conversion losses with end-to-end efficiencies to the 800 VDC boundary. b, Monte Carlo uncertainty at the reference point. c, Load-distance sweep showing where the DC-backbone loss advantage over traditional AC exceeds 10, 50 and 100 MW. d, One-at-a-time sensitivity of the central saving.',
+'Fig. 2 | Efficiency, stronger baselines and design space.':'a, Central 1 GW, 20 km reference-case corridor and conversion losses with end-to-end efficiencies to the 800 VDC boundary; bar colours denote loss components, not AC/DC sections. b, Monte Carlo uncertainty at the reference point. c, Load-distance sweep showing where the DC-backbone loss advantage over traditional AC exceeds 10, 50 and 100 MW. d, One-at-a-time sensitivity of the central saving.',
 'Fig. 3 | Harmonic ownership and OpenDSS-ready screening.':'a, Harmonic ownership boundary for distributed AC-facing converter cases versus the proposed single utility AC/DC terminal. b, Monte Carlo PCC voltage THD for the three architectures and two stronger baselines, with a 5% planning guide shown for context. c, 95th-percentile individual harmonic voltage distortion. d, Direct OpenDSS harmonic solve compared with the internal nodal-frequency solver.',
 'Fig. 4 | Voltage stabilization of synchronized AI training loads.':'a, Representative AI training waveform and grid-facing power trajectories. b, Frequency-domain attenuation of grid-side power fluctuations. c, Normalized 0.1-20 Hz spectral magnitude and 99th-percentile ramp rate. d, Shared DC-buffer power and energy window required for the reference waveform.',
 'Fig. 5 | Data-center load pockets and voltage-class envelope.':'a, Public planning-data precedent showing multi-GW load-pocket growth. b, Bipole current as a function of cluster load for several candidate DC voltage classes, with the public planning range shown for context.'}
