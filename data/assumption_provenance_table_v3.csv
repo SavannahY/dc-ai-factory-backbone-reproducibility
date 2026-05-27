@@ -1,9 +1,19 @@
 parameter,value,role,source
+Reference useful load,1 GW at the 800 VDC interface,central reference case,this study
+Reference corridor length,20 km equivalent corridor,central reference case,this study
+Reference AC voltage,138 kV line-to-line,representative subtransmission voltage,this study
+Reference AC power factor,0.98,central AC-current assumption,this study
+Reference DC voltage,"+/-138 kV, or 276 kV pole-to-pole",representative DC design point,this study
+Conductor resistance,0.01 ohm/km per phase or pole,screening assumption,this study
+Traditional downstream efficiency,0.991 x 0.982 = 97.32%,central loss assumption,this study
+Local SST efficiency,98.5%,central local-SST assumption,this study
+99% local-SST upper-bound comparator,99.0%,strong local-SST baseline,"this study, motivated by high-efficiency SiC conversion evidence"
+DC terminal AC/DC efficiency,99.4%,central DC-backbone assumption,this study
+Subtransmission-to-34.5 kV DC/DC efficiency,99.4%,central DC-backbone assumption,this study
+34.5 kV/800 V DC/DC efficiency,99.2%,central DC-backbone assumption,this study
 7 kV/400 V DC/DC efficiency,99.0%,measured device evidence,Rothmund et al. 2019
 3.8 kV AC to 400 V DC SST chain,98.1%,measured chain evidence,Rothmund et al. 2019
 5 kV modular M-S4T peak efficiency,97.5% estimated,modular MVDC evidence,Zheng et al. 2021
 20 kW 1000 V/48 V prototype,96% measured; 97.5% estimated with synchronous rectification,data-center voltage-step evidence,Samanta et al. 2020
 AI load spectral range,0.1-20 Hz utility concern,load-dynamics evidence,Choukse et al. 2025
-Reference DC voltage,+/-138 kV,representative design point,this study
 Grid short-circuit strength,10 GVA,screening assumption,this study
-Conductor resistance,0.01 ohm/km per phase or pole,screening assumption,this study
