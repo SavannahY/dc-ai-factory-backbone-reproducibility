@@ -530,7 +530,7 @@ def figure2():
     fig,axes=plt.subplots(2,2,figsize=(11,8),gridspec_kw={'width_ratios':[1,1.15]})
     colors={'Traditional AC':'#377eb8','Local SST':'#984ea3','Local SST optimistic':'#bc80bd','Subtransmission DC backbone':'#e6550d'}
     component_colors={'corridor':'#9aa3a6','conversion':'#80cdc1'}
-    order=['Traditional AC','Local SST','Local SST optimistic','Subtransmission DC backbone']
+    order=['Traditional AC','Local SST','Subtransmission DC backbone']
     ax=axes[0,0]
     ref_idx=ref_df.set_index('architecture')
     corridor=[ref_idx.loc[o,'corridor_MW'] for o in order]
@@ -539,18 +539,18 @@ def figure2():
     x=np.arange(len(order))
     ax.bar(x, corridor, color=component_colors['corridor'], alpha=0.92, label='corridor')
     ax.bar(x, conversion, bottom=corridor, color=component_colors['conversion'], alpha=0.92, label='conversion')
-    ax.set_xticks(range(len(order))); ax.set_xticklabels(['Traditional\nAC','Local\nSST','99% local\nSST','DC\nbackbone'],fontsize=7)
+    ax.set_xticks(range(len(order))); ax.set_xticklabels(['Traditional\nAC','Local\nSST','DC\nbackbone'],fontsize=7)
     ax.set_ylabel('Loss at 1 GW, 20 km (MW)'); ax.set_title('a  Reference loss decomposition',loc='left',fontsize=11,weight='bold')
     ax.set_ylim(0, max(vals)+5.1)
     for i,v in enumerate(vals): ax.text(i,v+0.8,f'{v:.1f} MW\n{ref_idx.loc[order[i],"eff"]*100:.2f}%',ha='center',fontsize=7)
     ax.legend(fontsize=7,frameon=False,loc='upper right')
     ax.grid(axis='y',alpha=0.25)
     ax=axes[0,1]
-    data=[mc_df['traditional_loss_MW'], mc_df['local_sst_loss_MW'], mc_df['local_sst_optimistic_loss_MW'], mc_df['dc_loss_MW']]
+    data=[mc_df['traditional_loss_MW'], mc_df['local_sst_loss_MW'], mc_df['dc_loss_MW']]
     parts=ax.violinplot(data, showmedians=True, showextrema=False)
     for pc,c in zip(parts['bodies'],[colors[o] for o in order]): pc.set_facecolor(c); pc.set_edgecolor(c); pc.set_alpha(0.45)
-    ax.set_xticks(range(1,len(order)+1)); ax.set_xticklabels(['Traditional\nAC','Local\nSST','99% local\nSST','DC\nbackbone'],fontsize=7)
-    ax.set_ylabel('Loss under uncertainty (MW)'); ax.set_title('b  Uncertainty and stronger SST baseline',loc='left',fontsize=11,weight='bold'); ax.grid(axis='y',alpha=0.25)
+    ax.set_xticks(range(1,len(order)+1)); ax.set_xticklabels(['Traditional\nAC','Local\nSST','DC\nbackbone'],fontsize=7)
+    ax.set_ylabel('Loss under uncertainty (MW)'); ax.set_title('b  Reference-case uncertainty',loc='left',fontsize=11,weight='bold'); ax.grid(axis='y',alpha=0.25)
     trad_p50=np.median(data[0])
     ax.axhline(trad_p50,color=colors['Traditional AC'],lw=0.8,ls='--',alpha=0.55)
     ax.text(4.46,trad_p50+0.7,'Traditional AC p50',ha='right',fontsize=6.3,color=colors['Traditional AC'])
@@ -866,7 +866,7 @@ methods = [
 
 figure_legends = {
 'Fig. 1 | Three power-delivery architectures for AI factories.':'Orange lines denote AC sections and blue lines denote DC sections. a, Traditional AC delivery keeps AC in the subtransmission and facility distribution system before conversion to the 800 VDC data-center boundary. b, Local SST delivery uses the same AC corridor but converts at each AI campus, with AC input and DC output shown explicitly. c, The proposed architecture moves the AC/DC boundary upstream and feeds multiple campuses from a utility-operated subtransmission DC backbone, with DC/DC conversion to 34.5 kV DC and then to 800 VDC.',
-'Fig. 2 | Efficiency, stronger baselines and design space.':'a, Central 1 GW, 20 km reference-case corridor and conversion losses with end-to-end efficiencies to the 800 VDC boundary; the 99% local-SST case is an upper-bound comparator and bar colours denote loss components, not AC/DC sections. b, Monte Carlo uncertainty at the reference point. c, Load-distance sweep showing where the DC-backbone loss advantage over traditional AC exceeds 10, 50 and 100 MW. d, One-at-a-time sensitivity of the central saving.',
+'Fig. 2 | Efficiency, uncertainty and design space.':'a, Central 1 GW, 20 km reference-case corridor and conversion losses with end-to-end efficiencies to the 800 VDC boundary; bar colours denote loss components, not AC/DC sections. b, Monte Carlo uncertainty at the reference point. c, Load-distance sweep showing where the DC-backbone loss advantage over traditional AC exceeds 10, 50 and 100 MW. d, One-at-a-time sensitivity of the central saving. A 99.0%-efficient local-SST upper-bound comparator is reported in the text and Supplementary Table 1.',
 'Fig. 3 | Harmonic ownership and OpenDSS-ready screening.':'a, Harmonic ownership boundary for distributed AC-facing converter cases versus the proposed single utility AC/DC terminal. b, Monte Carlo PCC voltage THD for the three architectures and two stronger baselines, with a 5% planning guide shown for context. c, 95th-percentile individual harmonic voltage distortion. d, Direct OpenDSS harmonic solve compared with the internal nodal-frequency solver.',
 'Fig. 4 | Voltage stabilization of synchronized AI training loads.':'a, Representative AI training waveform and grid-facing power trajectories. b, Frequency-domain attenuation of grid-side power fluctuations. c, Normalized 0.1-20 Hz spectral magnitude and 99th-percentile ramp rate. d, Shared DC-buffer power and energy window required for the reference waveform.',
 'Fig. 5 | Data-center load pockets and voltage-class envelope.':'a, Public planning-data precedent showing multi-GW load-pocket growth. b, Bipole current as a function of cluster load for several candidate DC voltage classes, with the public planning range shown for context.'}
