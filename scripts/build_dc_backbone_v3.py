@@ -582,9 +582,19 @@ def figure2():
     ax.annotate(f'base saving = {base_saving:.1f} MW',xy=(base_saving,len(tmp)-0.32),
                 xytext=(base_saving-1.15,len(tmp)-0.32),fontsize=7,color='#e6550d',
                 ha='right',va='center',arrowprops=dict(arrowstyle='-',color='#e6550d',lw=0.9))
-    ax.set_yticks(y); ax.set_yticklabels(tmp['parameter'],fontsize=7)
+    short_labels={
+        'traditional downstream efficiency':'trad. downstream eff.',
+        'corridor length':'corridor length',
+        '34.5 kV/800 V DC/DC efficiency':'34.5kV-800V eff.',
+        'HV DC/DC efficiency':'HV DC/DC eff.',
+        'DC terminal efficiency':'DC terminal eff.',
+        'conductor resistance':'conductor R',
+        'AC power factor':'AC power factor'
+    }
+    ax.set_yticks(y); ax.set_yticklabels([short_labels.get(p,p) for p in tmp['parameter']],fontsize=7)
+    ax.tick_params(axis='y',pad=2)
     ax.set_xlabel('Saving vs traditional AC (MW)'); ax.set_title('d  One-at-a-time sensitivity',loc='left',fontsize=11,weight='bold'); ax.grid(axis='x',alpha=0.25)
-    fig.subplots_adjust(left=0.07,right=0.98,bottom=0.08,top=0.93,wspace=0.38,hspace=0.38)
+    fig.subplots_adjust(left=0.07,right=0.98,bottom=0.08,top=0.93,wspace=0.44,hspace=0.38)
     savefig(fig,'fig2_efficiency_uncertainty_designspace_v3')
 figure2()
 
