@@ -1,0 +1,27 @@
+{
+  "title": "Code and data for direct-current subtransmission backbones for grid-stable AI factories",
+  "upload_type": "software",
+  "description": "Source data, OpenDSS harmonic-network cases, figure-generation scripts and verification tests supporting the manuscript \"Direct-current subtransmission backbones for grid-stable AI factories\".",
+  "creators": [
+    {
+      "name": "TBD author team"
+    }
+  ],
+  "license": "mit",
+  "access_right": "open",
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/SavannahY/dc-ai-factory-backbone-reproducibility",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ],
+  "keywords": [
+    "AI factories",
+    "DC subtransmission",
+    "OpenDSS",
+    "power quality",
+    "data centers",
+    "800 VDC"
+  ]
+}

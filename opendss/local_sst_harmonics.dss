@@ -1,0 +1,15 @@
+! AI factory subtransmission harmonic equivalent
+! Generated for reproducible external OpenDSS runs. The manuscript figures use the
+! transparent nodal-frequency solver in src/ai_dc_backbone/harmonics.py.
+Clear
+Set DefaultBaseFrequency=60
+New Circuit.AI_Factory_Harmonics basekv=138 pu=1.0 phases=3 bus1=SourceBus MVAsc3=10000 MVAsc1=10000
+New Linecode.Corridor nphases=3 r1=0.010 x1=0.050 r0=0.030 x0=0.150 units=km
+New Line.Source_Bus1 bus1=SourceBus bus2=Bus1 phases=3 linecode=Corridor length=6.67 units=km
+New Line.Bus1_Bus2 bus1=Bus1 bus2=Bus2 phases=3 linecode=Corridor length=6.67 units=km
+New Line.Bus2_Bus3 bus1=Bus2 bus2=Bus3 phases=3 linecode=Corridor length=6.67 units=km
+New Load.Campus1 bus1=Bus1 phases=3 kv=138 kw=333333 pf=0.98 model=5
+New Load.Campus2 bus1=Bus2 phases=3 kv=138 kw=333333 pf=0.98 model=5
+New Load.Campus3 bus1=Bus3 phases=3 kv=138 kw=333333 pf=0.98 model=5
+! Harmonic orders: 5 7 11 13 17 19 23 25 29 31.
+Solve mode=harmonics

@@ -1,0 +1,51 @@
+scenario,h,p95_individual_harmonic_voltage_pct
+AC + active filter/storage,5,0.3309629715513964
+AC + active filter/storage,7,0.47725563427058953
+AC + active filter/storage,11,1.4578740841356308
+AC + active filter/storage,13,0.8381986029280547
+AC + active filter/storage,17,0.22904613024879616
+AC + active filter/storage,19,0.26001208913531465
+AC + active filter/storage,23,0.5722073312873227
+AC + active filter/storage,25,0.38796441215402216
+AC + active filter/storage,29,0.16546943374700107
+AC + active filter/storage,31,0.15263939426227907
+Local SST,5,0.3725418582906619
+Local SST,7,0.5107926326153228
+Local SST,11,1.2524217339444454
+Local SST,13,0.7540469446138808
+Local SST,17,0.17978848685988771
+Local SST,19,0.21580963401625883
+Local SST,23,0.40413619254464633
+Local SST,25,0.29736362848379716
+Local SST,29,0.10591647412889349
+Local SST,31,0.09748432704296243
+Local SST + coordinated control,5,0.28522187763074625
+Local SST + coordinated control,7,0.4062032098631483
+Local SST + coordinated control,11,0.9751564904478909
+Local SST + coordinated control,13,0.5600483102572831
+Local SST + coordinated control,17,0.1503340447723283
+Local SST + coordinated control,19,0.16807311108659878
+Local SST + coordinated control,23,0.31800933359751105
+Local SST + coordinated control,25,0.2241213060028519
+Local SST + coordinated control,29,0.09133706421509293
+Local SST + coordinated control,31,0.0746277609697583
+Subtransmission DC backbone,5,0.1801582098862558
+Subtransmission DC backbone,7,0.27802825893142014
+Subtransmission DC backbone,11,0.6022178407436394
+Subtransmission DC backbone,13,0.38293418732092716
+Subtransmission DC backbone,17,0.07893160134122224
+Subtransmission DC backbone,19,0.09229245901317143
+Subtransmission DC backbone,23,0.16632452228462002
+Subtransmission DC backbone,25,0.12715706626112364
+Subtransmission DC backbone,29,0.04630318553812961
+Subtransmission DC backbone,31,0.041320844449289844
+Traditional AC,5,0.8488782769828251
+Traditional AC,7,1.1890262729110959
+Traditional AC,11,3.173049938460215
+Traditional AC,13,1.9642911408575148
+Traditional AC,17,0.5483835880716861
+Traditional AC,19,0.6425844869388676
+Traditional AC,23,1.2509973369579328
+Traditional AC,25,0.8850913899845869
+Traditional AC,29,0.3927481253134096
+Traditional AC,31,0.3638052593890513

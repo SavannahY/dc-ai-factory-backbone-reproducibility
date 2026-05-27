@@ -1,0 +1,19 @@
+{
+  "engine": "opendssdirect.py",
+  "n_trials": 60,
+  "harmonic_orders": [
+    5,
+    7,
+    11,
+    13,
+    17,
+    19,
+    23,
+    25
+  ],
+  "p95_thdv_pct": {
+    "dc_backbone": 0.7044860533324226,
+    "local_sst": 1.5818409158003606,
+    "traditional_ac": 3.966099139396345
+  }
+}

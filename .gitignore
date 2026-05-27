@@ -1,0 +1,10 @@
+/.pytest_cache/
+/reproduced/
+/submission_package/
+/DC_backbone_AI_factories_NComms_v3_full_package.zip
+/docs/cover_letter_nature_communications.md
+/docs/submission_readiness_checklist.md
+/docs/reference_audit.md
+__pycache__/
+*.pyc
+.DS_Store

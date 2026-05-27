@@ -1,0 +1,13 @@
+
+cff-version: 1.2.0
+title: "Code and data for Direct-current subtransmission backbones for grid-stable AI factories"
+message: "If you use this code or data, please cite the associated manuscript and this archive."
+type: software
+authors:
+  - family-names: "TBD"
+    given-names: "TBD"
+version: "0.3.0"
+date-released: "2026-05-26"
+license: "MIT"
+repository-code: "https://github.com/SavannahY/dc-ai-factory-backbone-reproducibility"
+abstract: "Reproducibility package containing source data, OpenDSS cases, figure-generation code and verification tests for a manuscript on direct-current subtransmission backbones for grid-stable AI factories."

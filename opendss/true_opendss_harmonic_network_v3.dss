@@ -1,0 +1,16 @@
+// True OpenDSS harmonic network for AI-factory load-pocket screening
+// Python driver injects harmonic current sources and executes Solve mode=harmonic harmonic=<order>.
+Clear
+New Circuit.AIFactory basekv=138 pu=1.0 phases=3 bus1=source.1.2.3
+Edit Vsource.Source bus1=source.1.2.3 basekv=138 pu=1 phases=3 MVAsc3=1200 MVAsc1=1200
+New Linecode.LC138 nphases=3 r1=0.065 x1=0.42 r0=0.20 x0=1.25 c1=4.2 c0=2.0 units=km
+New Line.Main bus1=source.1.2.3 bus2=pcc.1.2.3 phases=3 linecode=LC138 length=2 units=km
+New Line.C1 bus1=pcc.1.2.3 bus2=campus1.1.2.3 phases=3 linecode=LC138 length=8 units=km
+New Line.C2 bus1=pcc.1.2.3 bus2=campus2.1.2.3 phases=3 linecode=LC138 length=13 units=km
+New Line.C3 bus1=pcc.1.2.3 bus2=campus3.1.2.3 phases=3 linecode=LC138 length=18 units=km
+New Load.Fund1 bus1=campus1.1.2.3 phases=3 kv=138 kw=333000 kvar=83500 model=1
+New Load.Fund2 bus1=campus2.1.2.3 phases=3 kv=138 kw=333000 kvar=83500 model=1
+New Load.Fund3 bus1=campus3.1.2.3 phases=3 kv=138 kw=333000 kvar=83500 model=1
+Set VoltageBases=[138]
+CalcVoltageBases
+Solve mode=snap

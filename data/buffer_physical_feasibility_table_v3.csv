@@ -1,0 +1,6 @@
+technology,power_response,high_power_suitability,energy_window_suitability,deployment_layer,role
+DC-link capacitors,ms,partial,low,converter terminal,"absorbs switching and short transients, not the full energy window"
+supercapacitor bank,ms-s,high,medium,DC terminal / campus station,"high-power, low-energy smoothing"
+lithium-ion BESS,100 ms-s,high,high,"rack, row, or station",energy window and longer ramp compliance
+flywheel,sub-second,medium,medium,station,high-cycle power buffering
+GPU power smoothing,in-band firmware,partial,not energy storage,GPU / server,reduces the disturbance before it reaches power delivery

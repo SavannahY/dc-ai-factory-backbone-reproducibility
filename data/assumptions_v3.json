@@ -1,0 +1,21 @@
+{
+  "reference_load_MW": 1000,
+  "reference_corridor_km": 20,
+  "campuses": 3,
+  "ac_voltage_LL_kV": 138,
+  "dc_bipole_kV": 276,
+  "dc_pole_kV": 138,
+  "power_factor": 0.98,
+  "line_resistance_ohm_per_km_phase_or_pole": 0.01,
+  "traditional_downstream_efficiency": 0.973162,
+  "local_sst_efficiency": 0.985,
+  "local_sst_strong_efficiency": 0.99,
+  "dc_terminal_acdc_efficiency": 0.994,
+  "dc_stage1_efficiency": 0.994,
+  "dc_stage2_efficiency": 0.992,
+  "short_circuit_strength_GVA": 10,
+  "dynamic_reference_duration_s": 240,
+  "dynamic_timestep_s": 0.02,
+  "economic_load_factor": 0.9,
+  "electricity_price_USD_per_MWh_mid": 60
+}
