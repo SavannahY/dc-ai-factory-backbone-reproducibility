@@ -14,14 +14,18 @@ This repository contains the data, screening models, figures and OpenDSS-compati
 ## Reproducing results
 ```bash
 python scripts/reproduce_all.py
+python scripts/harmonic_robustness_sweep.py
 python scripts/run_opendss_if_available.py  # optional, requires opendssdirect.py
 ```
 
-`scripts/reproduce_all.py` regenerates Fig. 3 and Fig. 4 from the archived CSV
-outputs into `reproduced/figures`. The manuscript figures were generated with
-transparent Python models. Fig. 3 includes direct OpenDSSDirect.py harmonic-run
-artifacts and an internal nodal-frequency solver check. OpenDSS circuit files
-and the run log are included under `opendss/`.
+`scripts/reproduce_all.py` regenerates the archived OpenDSS Fig. 3 diagnostic
+and Fig. 4 from the archived CSV outputs into `reproduced/figures`.
+`scripts/harmonic_robustness_sweep.py` regenerates the final two-panel Fig. 3
+and the full harmonic robustness grid across campus count, cluster load, voltage
+class, short-circuit ratio, phase coherence and corridor length. The manuscript
+figures were generated with transparent Python models. The broader robustness
+envelope is archived as Supplementary Figs. S5-S6 and CSV tables under `data/`.
+OpenDSS circuit files and the run log are included under `opendss/`.
 
 ## Citation
 See `CITATION.cff`. This repository is structured for GitHub release and Zenodo deposition.

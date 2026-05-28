@@ -1,9 +1,11 @@
 #!/usr/bin/env python
-"""Regenerate key manuscript figures from the archived CSV outputs.
+"""Regenerate key diagnostic figures from the archived CSV outputs.
 
 This public repository includes all source CSV files used for the manuscript
-figures. Running this script rebuilds Fig. 3 and Fig. 4 into
-``reproduced/figures`` as a fast submission-time reproducibility check.
+figures. Running this script rebuilds the archived OpenDSS Fig. 3 diagnostic and
+Fig. 4 into ``reproduced/figures`` as a fast submission-time reproducibility
+check. The final two-panel Fig. 3 and harmonic robustness sweep are regenerated
+with ``scripts/harmonic_robustness_sweep.py``.
 """
 import os
 import tempfile
@@ -267,7 +269,7 @@ def figure4():
 def main():
     figure3()
     figure4()
-    print(f"Reproduced Fig. 3 and Fig. 4 under {OUT}")
+    print(f"Reproduced the archived OpenDSS Fig. 3 diagnostic and Fig. 4 under {OUT}")
 
 
 if __name__ == "__main__":

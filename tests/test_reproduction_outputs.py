@@ -18,3 +18,16 @@ def test_dynamic_metrics_buffering():
     df = pd.read_csv(ROOT / "data" / "dynamic_metrics_v3.csv", index_col=0)
     assert df.loc["Subtransmission DC backbone", "relative_to_ac"] < df.loc["Local SST", "relative_to_ac"]
     assert df.loc["DC buffer", "energy_window_MWh"] > 0
+
+def test_harmonic_robustness_grid_summary():
+    grid = pd.read_csv(ROOT / "data" / "harmonic_robustness_input_grid_v3.csv")
+    assert len(grid) == 4 * 4 * 4 * 4 * 3 * 4
+
+    summary = pd.read_csv(ROOT / "data" / "harmonic_robustness_summary_v3.csv")
+    arch = summary[summary["group"] == "architecture"].set_index("level")
+    assert (
+        arch.loc["Subtransmission DC backbone", "median_p95_thdv_pct"]
+        < arch.loc["Local SST", "median_p95_thdv_pct"]
+        < arch.loc["Traditional AC", "median_p95_thdv_pct"]
+    )
+    assert arch.loc["Subtransmission DC backbone", "fraction_exceeding_5pct_guide"] == 0
