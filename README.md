@@ -18,8 +18,8 @@ python scripts/harmonic_robustness_sweep.py
 python scripts/run_opendss_if_available.py  # optional, requires opendssdirect.py
 ```
 
-`scripts/reproduce_all.py` regenerates the archived OpenDSS Fig. 3 diagnostic
-and Fig. 4 from the archived CSV outputs into `reproduced/figures`.
+`scripts/reproduce_all.py` regenerates the archived OpenDSS Fig. 3 diagnostic,
+Fig. 4 and Fig. 5 from archived CSV outputs into `reproduced/figures`.
 `scripts/harmonic_robustness_sweep.py` regenerates the final two-panel Fig. 3
 and the full harmonic robustness grid across campus count, cluster load, voltage
 class, short-circuit ratio, phase coherence and corridor length. The manuscript

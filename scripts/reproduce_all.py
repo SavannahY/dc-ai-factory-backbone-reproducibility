@@ -2,10 +2,10 @@
 """Regenerate key diagnostic figures from the archived CSV outputs.
 
 This public repository includes all source CSV files used for the manuscript
-figures. Running this script rebuilds the archived OpenDSS Fig. 3 diagnostic and
-Fig. 4 into ``reproduced/figures`` as a fast submission-time reproducibility
-check. The final two-panel Fig. 3 and harmonic robustness sweep are regenerated
-with ``scripts/harmonic_robustness_sweep.py``.
+figures. Running this script rebuilds the archived OpenDSS Fig. 3 diagnostic,
+Fig. 4 and Fig. 5 into ``reproduced/figures`` as a fast submission-time
+reproducibility check. The final two-panel Fig. 3 and harmonic robustness sweep
+are regenerated with ``scripts/harmonic_robustness_sweep.py``.
 """
 import os
 import tempfile
@@ -263,10 +263,76 @@ def figure4():
     savefig(fig, "fig4_voltage_stabilization_averaged_emt_v3")
 
 
+def figure5():
+    fig, axes = plt.subplots(1, 2, figsize=(10.8, 4.1), gridspec_kw={"width_ratios": [1.0, 1.35]})
+
+    ax = axes[0]
+    forecast_gw = [2.1, 3.4, 4.2]
+    labels = ["2021-22\nstudy", "2024-25\nbase", "2024-25\nhigh-load\nsensitivity"]
+    x = np.arange(len(forecast_gw))
+    ax.bar(x, forecast_gw, color=["#c9c9c9", "#8f8f8f", "#4f4f4f"], width=0.62)
+    for xi, val in zip(x, forecast_gw):
+        ax.text(xi, val + 0.08, f"{val:.1f} GW", ha="center", fontsize=8)
+    ax.annotate(
+        "public multi-GW\nload-pocket precedent",
+        xy=(2, 4.2),
+        xytext=(0.58, 3.15),
+        fontsize=7.5,
+        color="0.25",
+        ha="center",
+        arrowprops=dict(arrowstyle="->", lw=0.9, color="0.35"),
+    )
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=7.5)
+    ax.set_ylabel("San Jose study-area load forecast (GW)")
+    ax.set_ylim(0, 4.75)
+    ax.set_title("a  Public load-pocket scale", loc="left", fontsize=10, weight="bold")
+    ax.text(0.02, 0.04, "Source: CAISO San Jose area planning documents", transform=ax.transAxes, fontsize=6.6, color="0.35")
+    ax.grid(axis="y", alpha=0.22)
+
+    ax = axes[1]
+    load_gw = np.linspace(0.1, 5.0, 150)
+    voltage_classes = [(69, "#9ecae1"), (138, "#e6550d"), (230, "#31a354"), (320, "#756bb1")]
+    for pole, color in voltage_classes:
+        current_ka = load_gw * 1e9 / (2 * pole * 1e3) / 1000
+        ax.plot(load_gw, current_ka, label=f"+/-{pole} kV", color=color, lw=2)
+    ax.axhline(4, color="0.4", ls="--", lw=1, label="illustrative 4 kA line")
+    ax.axvspan(3.4, 4.2, color="#f0f0f0", alpha=0.75, label="3.4-4.2 GW precedent")
+    ref_current = 1e9 / (2 * 138e3) / 1000
+    ax.scatter([1.0], [ref_current], c="#e6550d", edgecolor="k", zorder=4)
+    ax.annotate(
+        "reference case:\n1 GW at +/-138 kV\n= 3.6 kA",
+        xy=(1.0, ref_current),
+        xytext=(1.35, 7.2),
+        fontsize=7,
+        color="#e6550d",
+        arrowprops=dict(arrowstyle="->", color="#e6550d", lw=0.8),
+    )
+    ax.text(
+        3.48,
+        8.8,
+        "multi-GW range needs\nhigher voltage, parallel bipoles\nor both",
+        fontsize=7.2,
+        color="0.25",
+        ha="left",
+    )
+    ax.set_xlabel("Cluster load (GW)")
+    ax.set_ylabel("Single-bipole current (kA)")
+    ax.set_xlim(0, 5.25)
+    ax.set_ylim(0, 37.5)
+    ax.set_title("b  Load determines voltage class", loc="left", fontsize=10, weight="bold")
+    ax.legend(fontsize=7, frameon=False, loc="upper left")
+    ax.grid(alpha=0.22)
+
+    fig.tight_layout()
+    savefig(fig, "fig5_case_study_voltage_envelope_v3")
+
+
 def main():
     figure3()
     figure4()
-    print(f"Reproduced the archived OpenDSS Fig. 3 diagnostic and Fig. 4 under {OUT}")
+    figure5()
+    print(f"Reproduced the archived OpenDSS Fig. 3 diagnostic, Fig. 4 and Fig. 5 under {OUT}")
 
 
 if __name__ == "__main__":

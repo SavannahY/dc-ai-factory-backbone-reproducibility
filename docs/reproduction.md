@@ -1,11 +1,12 @@
 This repository is structured for public release. To regenerate the archived
-OpenDSS Fig. 3 diagnostic and Fig. 4 from archived CSV outputs, run:
+OpenDSS Fig. 3 diagnostic, Fig. 4 and Fig. 5 from archived CSV outputs, run:
 
 ```bash
 python scripts/reproduce_all.py
 ```
 
-The script writes the diagnostic Fig. 3 and Fig. 4 to `reproduced/figures`.
+The script writes the diagnostic Fig. 3, Fig. 4 and Fig. 5 to
+`reproduced/figures`.
 OpenDSSDirect.py harmonic-run artifacts are archived under `opendss/` and
 `data/true_opendss_*`. To rerun OpenDSS in a local environment with
 OpenDSSDirect.py installed, run:

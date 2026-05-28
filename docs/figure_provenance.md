@@ -8,7 +8,7 @@ No final manuscript figure is a generative-AI image, photo-realistic rendering,
 stock image, screenshot collage or manually edited bitmap. The distributed PNG,
 SVG and PDF files are Matplotlib exports. The SVG files can be inspected as
 vector graphics. `scripts/reproduce_all.py` regenerates the archived OpenDSS
-Fig. 3 diagnostic and Fig. 4 from source CSV files as a fast submission check.
+Fig. 3 diagnostic, Fig. 4 and Fig. 5 from source CSV files as a fast submission check.
 `scripts/harmonic_robustness_sweep.py` regenerates the final two-panel Fig. 3,
 the harmonic robustness screening figures and the supporting CSV tables.
 
