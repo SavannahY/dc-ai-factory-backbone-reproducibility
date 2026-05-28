@@ -178,56 +178,53 @@ def figure4():
     fig, axes = plt.subplots(2, 2, figsize=(11, 7.8))
 
     ax = axes[0, 0]
-    ax.plot(t[win], dyn.AI_load_MW.to_numpy()[win], color="0.55", lw=0.9, label="AI load")
-    ax.plot(t[win], dyn.grid_traditional_MW.to_numpy()[win], color=COLORS["Traditional AC"], lw=0.75, label="Traditional AC")
-    ax.plot(
-        t[win],
-        dyn.grid_ac_filter_storage_MW.to_numpy()[win],
-        color=COLORS["AC + active filter/storage"],
-        lw=1.0,
-        label="AC + storage",
-    )
-    ax.plot(t[win], dyn.grid_local_sst_MW.to_numpy()[win], color=COLORS["Local SST"], lw=1.0, label="Local SST")
-    ax.plot(
-        t[win],
-        dyn.grid_dc_backbone_MW.to_numpy()[win],
-        color=COLORS["Subtransmission DC backbone"],
-        lw=1.8,
-        label="DC backbone",
-    )
+    power_series = [
+        ("Traditional AC", dyn.grid_traditional_MW.to_numpy(), 1.0),
+        ("Local SST", dyn.grid_local_sst_MW.to_numpy(), 1.25),
+        ("Subtransmission DC backbone", dyn.grid_dc_backbone_MW.to_numpy(), 2.0),
+    ]
+    for name, values, lw in power_series:
+        label = "DC backbone" if name == "Subtransmission DC backbone" else name
+        ax.plot(t[win], values[win], color=COLORS[name], lw=lw, label=label)
     ax.set_ylabel("Grid-side power (MW)")
     ax.set_xlabel("Time (s)")
-    ax.set_title("a  AI training load and grid power", loc="left", fontsize=11, weight="bold")
-    ax.legend(fontsize=7, ncol=2, frameon=False)
+    ax.set_title("a  Grid-facing power command", loc="left", fontsize=11, weight="bold")
+    ax.legend(fontsize=7, ncol=1, frameon=False, loc="lower right")
     ax.grid(alpha=0.25)
 
     ax = axes[0, 1]
-    spectra = [
-        ("Traditional AC", dyn.grid_traditional_MW.to_numpy()),
-        ("AC + storage", dyn.grid_ac_filter_storage_MW.to_numpy()),
-        ("Local SST", dyn.grid_local_sst_MW.to_numpy()),
-        ("DC backbone", dyn.grid_dc_backbone_MW.to_numpy()),
+    voltage_series = [
+        ("Traditional AC", dyn.pcc_v_ac_pct.to_numpy(), 1.0),
+        ("Local SST", dyn.pcc_v_local_sst_pct.to_numpy(), 1.25),
+        ("Subtransmission DC backbone", dyn.pcc_v_dc_pct.to_numpy(), 2.0),
     ]
-    for label, values in spectra:
-        color_key = {"AC + storage": "AC + active filter/storage", "DC backbone": "Subtransmission DC backbone"}.get(label, label)
-        freq, mag = spectrum(values)
-        mask = (freq >= 0.1) & (freq <= 20)
-        ax.plot(freq[mask], mag[mask], color=COLORS[color_key], lw=1.2, label=label)
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_xlim(0.1, 20)
-    ax.set_ylabel("Power spectral magnitude (MW)")
-    ax.set_xlabel("Frequency (Hz)")
-    ax.set_title("b  Frequency-domain mitigation", loc="left", fontsize=11, weight="bold")
-    ax.legend(fontsize=7, frameon=False)
-    ax.grid(alpha=0.25, which="both")
+    for name, values, lw in voltage_series:
+        label = "DC backbone" if name == "Subtransmission DC backbone" else name
+        ax.plot(t[win], values[win], color=COLORS[name], lw=lw, label=label)
+    ax.axhline(0, color="0.35", lw=0.8)
+    ax.set_ylabel("PCC voltage deviation (%)")
+    ax.set_xlabel("Time (s)")
+    ax.set_title("b  PCC voltage modulation", loc="left", fontsize=11, weight="bold")
+    voltage_text = []
+    for name, values, _ in voltage_series:
+        label = "DC" if name == "Subtransmission DC backbone" else ("Trad." if name == "Traditional AC" else "SST")
+        voltage_text.append(f"{label}: {np.quantile(np.abs(values[win]), 0.95):.2f}%")
+    ax.text(
+        0.02,
+        0.05,
+        "p95 |ΔV|  " + "   ".join(voltage_text),
+        transform=ax.transAxes,
+        fontsize=7,
+        color="0.25",
+        va="bottom",
+    )
+    ax.legend(fontsize=7, frameon=False, loc="lower right")
+    ax.grid(alpha=0.25)
 
     ax = axes[1, 0]
     order = [
         "Traditional AC",
-        "AC + active filter/storage",
         "Local SST",
-        "Local SST + coordinated control",
         "Subtransmission DC backbone",
     ]
     rel = [metrics.loc[o, "relative_to_ac"] * 100 for o in order]
@@ -237,28 +234,28 @@ def figure4():
     ax.bar(x - w / 2, rel, width=w, color=[COLORS[o] for o in order], alpha=0.78, label="0.1-20 Hz RSS")
     ax.bar(x + w / 2, ramp, width=w, color="0.25", alpha=0.62, label="p99 ramp")
     ax.set_xticks(x)
-    ax.set_xticklabels(["Trad.\nAC", "AC+\nstorage", "Local\nSST", "SST+\ncoord.", "DC\nbackbone"], fontsize=7)
+    ax.set_xticklabels(["Traditional\nAC", "Local\nSST", "DC\nbackbone"], fontsize=7)
     ax.set_ylabel("Percent of traditional AC baseline")
     ax.set_ylim(0, 115)
-    ax.text(x[-1], max(rel[-1], ramp[-1]) + 5, f"{rel[-1]:.1f}% RSS\n{ramp[-1]:.1f}% ramp", ha="center", fontsize=7, color=COLORS["Subtransmission DC backbone"])
-    ax.set_title("c  Normalized mitigation metrics", loc="left", fontsize=11, weight="bold")
+    for i, (rss, rramp) in enumerate(zip(rel, ramp)):
+        ax.text(i - w / 2, rss + 3, f"{rss:.0f}" if rss >= 10 else f"{rss:.1f}", ha="center", fontsize=6.5, color=COLORS[order[i]])
+        ax.text(i + w / 2, rramp + 3, f"{rramp:.0f}" if rramp >= 10 else f"{rramp:.1f}", ha="center", fontsize=6.5, color="0.25")
+    ax.set_title("c  Dynamic exposure metrics", loc="left", fontsize=11, weight="bold")
     ax.legend(fontsize=7, frameon=False)
     ax.grid(axis="y", alpha=0.25)
 
     ax = axes[1, 1]
     buffer_power = dyn.dc_buffer_power_MW.to_numpy()
-    buffer_energy = dyn.dc_buffer_energy_MWh.to_numpy()
-    ax.plot(t[win], buffer_power[win], color="#e6550d", lw=1.3, label="buffer power")
-    ax2 = ax.twinx()
-    ax2.plot(t[win], buffer_energy[win] - buffer_energy[win].min(), color="#756bb1", lw=1.0, label="energy state")
+    ax.plot(t[win], buffer_power[win], color="#e6550d", lw=1.4)
+    ax.fill_between(t[win], 0, buffer_power[win], where=buffer_power[win] >= 0, color="#e6550d", alpha=0.16, interpolate=True)
+    ax.fill_between(t[win], 0, buffer_power[win], where=buffer_power[win] < 0, color="#756bb1", alpha=0.14, interpolate=True)
     ax.axhline(0, color="0.3", lw=0.7)
     buffer_metrics = metrics.loc["DC buffer"]
-    ax.text(0.02, 0.92, f"discharge {buffer_metrics.max_discharge_MW:.0f} MW\ncharge {buffer_metrics.max_charge_MW:.0f} MW\nwindow {buffer_metrics.energy_window_MWh:.2f} MWh",
+    ax.text(0.02, 0.92, f"deliver {buffer_metrics.max_discharge_MW:.0f} MW\nabsorb {buffer_metrics.max_charge_MW:.0f} MW\nenergy window {buffer_metrics.energy_window_MWh:.2f} MWh",
             transform=ax.transAxes, ha="left", va="top", fontsize=7,
             bbox=dict(facecolor="white", edgecolor="0.85", pad=2))
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Shared DC buffer power (MW)")
-    ax2.set_ylabel("Energy window (MWh)")
     ax.set_title("d  Shared DC buffer requirement", loc="left", fontsize=11, weight="bold")
     ax.grid(alpha=0.25)
 

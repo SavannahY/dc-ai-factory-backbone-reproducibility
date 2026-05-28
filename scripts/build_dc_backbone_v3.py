@@ -665,40 +665,44 @@ def figure4():
     colors_d={'Traditional AC':'#377eb8','AC + active filter/storage':'#80b1d3','Local SST':'#984ea3','Local SST + coordinated control':'#bc80bd','Subtransmission DC backbone':'#e6550d'}
     win=(t>=25)&(t<=95)
     ax=axes[0,0]
-    ax.plot(t[win],P_MW[win],color='0.55',lw=0.9,label='AI load')
-    ax.plot(t[win],P_ac[win],color=colors_d['Traditional AC'],lw=0.75,label='Traditional AC')
-    ax.plot(t[win],P_ac_bess[win],color=colors_d['AC + active filter/storage'],lw=1.0,label='AC + storage')
-    ax.plot(t[win],P_sst[win],color=colors_d['Local SST'],lw=1.0,label='Local SST')
-    ax.plot(t[win],P_dc[win],color=colors_d['Subtransmission DC backbone'],lw=1.8,label='DC backbone')
-    ax.set_ylabel('Grid-side power (MW)'); ax.set_xlabel('Time (s)'); ax.set_title('a  AI training load and grid power',loc='left',fontsize=11,weight='bold'); ax.legend(fontsize=7,ncol=2,frameon=False); ax.grid(alpha=0.25)
+    for label,xdat,lw in [('Traditional AC',P_ac,1.0),('Local SST',P_sst,1.25),('DC backbone',P_dc,2.0)]:
+        key={'DC backbone':'Subtransmission DC backbone'}.get(label,label)
+        ax.plot(t[win],xdat[win],color=colors_d[key],lw=lw,label=label)
+    ax.set_ylabel('Grid-side power (MW)'); ax.set_xlabel('Time (s)'); ax.set_title('a  Grid-facing power command',loc='left',fontsize=11,weight='bold'); ax.legend(fontsize=7,ncol=1,frameon=False,loc='lower right'); ax.grid(alpha=0.25)
     ax=axes[0,1]
-    spectra=[('Traditional AC',P_ac),('AC + storage',P_ac_bess),('Local SST',P_sst),('DC backbone',P_dc)]
-    for label,xdat in spectra:
-        color_key={'AC + storage':'AC + active filter/storage','DC backbone':'Subtransmission DC backbone'}.get(label,label)
-        _,freq,mag=spectral_energy(xdat)
-        mask=(freq>=0.1)&(freq<=20)
-        ax.plot(freq[mask],mag[mask],color=colors_d[color_key],lw=1.2,label=label)
-    ax.set_xscale('log'); ax.set_yscale('log')
-    ax.set_xlim(0.1,20); ax.set_xlabel('Frequency (Hz)'); ax.set_ylabel('Power spectral magnitude (MW)')
-    ax.set_title('b  Frequency-domain mitigation',loc='left',fontsize=11,weight='bold'); ax.legend(fontsize=7,frameon=False); ax.grid(alpha=0.25,which='both')
+    voltage_series=[('Traditional AC',pcc_v_ac,1.0),('Local SST',pcc_v_sst,1.25),('DC backbone',pcc_v_dc,2.0)]
+    for label,xdat,lw in voltage_series:
+        key={'DC backbone':'Subtransmission DC backbone'}.get(label,label)
+        ax.plot(t[win],xdat[win],color=colors_d[key],lw=lw,label=label)
+    ax.axhline(0,color='0.35',lw=0.8)
+    voltage_text=[]
+    for label,xdat,_ in voltage_series:
+        short={'Traditional AC':'Trad.','Local SST':'SST','DC backbone':'DC'}[label]
+        voltage_text.append(f'{short}: {np.quantile(np.abs(xdat[win]),0.95):.2f}%')
+    ax.text(0.02,0.05,'p95 |ΔV|  '+'   '.join(voltage_text),transform=ax.transAxes,fontsize=7,color='0.25',va='bottom')
+    ax.set_xlabel('Time (s)'); ax.set_ylabel('PCC voltage deviation (%)')
+    ax.set_title('b  PCC voltage modulation',loc='left',fontsize=11,weight='bold'); ax.legend(fontsize=7,frameon=False,loc='lower right'); ax.grid(alpha=0.25)
     ax=axes[1,0]
-    order=['Traditional AC','AC + active filter/storage','Local SST','Local SST + coordinated control','Subtransmission DC backbone']
+    order=['Traditional AC','Local SST','Subtransmission DC backbone']
     rel=[energies[o]['relative_to_ac']*100 for o in order]
     ramp=[energies[o]['p99_ramp_MW_s']/energies['Traditional AC']['p99_ramp_MW_s']*100 for o in order]
     x=np.arange(len(order)); w=0.38
     ax.bar(x-w/2,rel,width=w,color=[colors_d[o] for o in order],alpha=0.78,label='0.1-20 Hz RSS')
     ax.bar(x+w/2,ramp,width=w,color='0.25',alpha=0.62,label='p99 ramp')
-    ax.set_xticks(x); ax.set_xticklabels(['Trad.\nAC','AC+\nstorage','Local\nSST','SST+\ncoord.','DC\nbackbone'],fontsize=7)
+    ax.set_xticks(x); ax.set_xticklabels(['Traditional\nAC','Local\nSST','DC\nbackbone'],fontsize=7)
     ax.set_ylabel('Percent of traditional AC baseline')
     ax.set_ylim(0,115)
-    ax.text(x[-1],max(rel[-1],ramp[-1])+5,f'{rel[-1]:.1f}% RSS\n{ramp[-1]:.1f}% ramp',ha='center',fontsize=7,color=colors_d['Subtransmission DC backbone'])
-    ax.set_title('c  Normalized mitigation metrics',loc='left',fontsize=11,weight='bold'); ax.legend(fontsize=7,frameon=False); ax.grid(axis='y',alpha=0.25)
+    for i,(rss,rramp) in enumerate(zip(rel,ramp)):
+        ax.text(i-w/2,rss+3,f'{rss:.0f}' if rss>=10 else f'{rss:.1f}',ha='center',fontsize=6.5,color=colors_d[order[i]])
+        ax.text(i+w/2,rramp+3,f'{rramp:.0f}' if rramp>=10 else f'{rramp:.1f}',ha='center',fontsize=6.5,color='0.25')
+    ax.set_title('c  Dynamic exposure metrics',loc='left',fontsize=11,weight='bold'); ax.legend(fontsize=7,frameon=False); ax.grid(axis='y',alpha=0.25)
     ax=axes[1,1]
-    ax.plot(t[win],P_buffer[win],color='#e6550d',lw=1.3,label='buffer power')
-    ax2=ax.twinx(); ax2.plot(t[win],E_MWh[win]-E_MWh[win].min(),color='#756bb1',lw=1.0,label='energy state')
+    ax.plot(t[win],P_buffer[win],color='#e6550d',lw=1.4)
+    ax.fill_between(t[win],0,P_buffer[win],where=P_buffer[win]>=0,color='#e6550d',alpha=0.16,interpolate=True)
+    ax.fill_between(t[win],0,P_buffer[win],where=P_buffer[win]<0,color='#756bb1',alpha=0.14,interpolate=True)
     ax.axhline(0,color='0.3',lw=0.7)
-    ax.text(0.02,0.92,f'discharge {P_buffer.max():.0f} MW\ncharge {-P_buffer.min():.0f} MW\nwindow {E_window:.2f} MWh',transform=ax.transAxes,ha='left',va='top',fontsize=7,bbox=dict(facecolor='white',edgecolor='0.85',pad=2))
-    ax.set_xlabel('Time (s)'); ax.set_ylabel('Shared DC buffer power (MW)'); ax2.set_ylabel('Energy window (MWh)'); ax.set_title('d  Shared DC buffer requirement',loc='left',fontsize=11,weight='bold'); ax.grid(alpha=0.25)
+    ax.text(0.02,0.92,f'deliver {P_buffer.max():.0f} MW\nabsorb {-P_buffer.min():.0f} MW\nenergy window {E_window:.2f} MWh',transform=ax.transAxes,ha='left',va='top',fontsize=7,bbox=dict(facecolor='white',edgecolor='0.85',pad=2))
+    ax.set_xlabel('Time (s)'); ax.set_ylabel('Shared DC buffer power (MW)'); ax.set_title('d  Shared DC buffer requirement',loc='left',fontsize=11,weight='bold'); ax.grid(alpha=0.25)
     fig.tight_layout(); savefig(fig,'fig4_voltage_stabilization_averaged_emt_v3')
 figure4()
 
@@ -885,7 +889,7 @@ figure_legends = {
 'Fig. 1 | Three power-delivery architectures for AI factories.':'Orange lines denote AC sections and blue lines denote DC sections. a, Traditional AC delivery keeps AC in the subtransmission and facility distribution system before conversion to the 800 VDC data-center boundary. b, Local SST delivery uses the same AC corridor but converts at each AI campus, with AC input and DC output shown explicitly. c, The proposed architecture moves the AC/DC boundary upstream and feeds multiple campuses from a utility-operated subtransmission DC backbone, with DC/DC conversion to 34.5 kV DC and then to 800 VDC.',
 'Fig. 2 | Efficiency, uncertainty and design space.':'a, Central 1 GW, 20 km reference-case corridor and conversion losses with end-to-end efficiencies to the 800 VDC boundary; bar colours denote loss components, not AC/DC sections. b, Monte Carlo uncertainty at the reference point. c, Load-distance sweep showing where the DC-backbone loss advantage over traditional AC exceeds 10, 50 and 100 MW. d, One-at-a-time sensitivity of the central saving. A 99.0% local-SST efficiency sensitivity case is reported in the text and Supplementary Table 1.',
 'Fig. 3 | Harmonic ownership and OpenDSS-ready screening.':'a, Harmonic ownership boundary for distributed AC-facing converter cases versus the proposed single utility AC/DC terminal. b, Monte Carlo PCC voltage THD for the three architectures and two stronger baselines, with a 5% planning guide shown for context. c, 95th-percentile individual harmonic voltage distortion. d, Direct OpenDSS harmonic solve compared with the internal nodal-frequency solver.',
-'Fig. 4 | Voltage stabilization of synchronized AI training loads.':'a, Representative AI training waveform and grid-facing power trajectories. b, Frequency-domain attenuation of grid-side power fluctuations. c, Normalized 0.1-20 Hz spectral magnitude and 99th-percentile ramp rate. d, Shared DC-buffer power and energy window required for the reference waveform.',
+'Fig. 4 | Voltage stabilization of synchronized AI training loads.':'a, Grid-facing power commands for the three architecture scenarios. b, PCC voltage modulation under the same synchronized AI training waveform. c, Normalized 0.1-20 Hz spectral magnitude and 99th-percentile ramp rate. d, Shared DC-buffer power and energy window required for the reference waveform.',
 'Fig. 5 | Data-center load pockets and voltage-class envelope.':'a, Public planning-data precedent showing multi-GW load-pocket growth. b, Bipole current as a function of cluster load for several candidate DC voltage classes, with the public planning range shown for context.'}
 
 data_availability = """All inputs and outputs used to generate Figs. 2-5 and Supplementary Figs. S1-S4 are included in the accompanying reproducibility package as CSV files. Public external data are cited in the References. No restricted operational data are used. Before journal submission, this package should be deposited in Zenodo and this statement should be updated with the final DOI."""
