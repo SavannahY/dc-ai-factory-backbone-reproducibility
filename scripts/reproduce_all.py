@@ -188,60 +188,52 @@ def figure4():
         ax.plot(t[win], values[win], color=COLORS[name], lw=lw, label=label)
     ax.set_ylabel("Grid-side power (MW)")
     ax.set_xlabel("Time (s)")
-    ax.set_title("a  Grid-facing power command", loc="left", fontsize=11, weight="bold")
+    ax.set_title("a  Grid-side power seen by the utility", loc="left", fontsize=11, weight="bold")
     ax.legend(fontsize=7, ncol=1, frameon=False, loc="lower right")
     ax.grid(alpha=0.25)
 
     ax = axes[0, 1]
-    voltage_series = [
-        ("Traditional AC", dyn.pcc_v_ac_pct.to_numpy(), 1.0),
-        ("Local SST", dyn.pcc_v_local_sst_pct.to_numpy(), 1.25),
-        ("Subtransmission DC backbone", dyn.pcc_v_dc_pct.to_numpy(), 2.0),
-    ]
-    for name, values, lw in voltage_series:
-        label = "DC backbone" if name == "Subtransmission DC backbone" else name
-        ax.plot(t[win], values[win], color=COLORS[name], lw=lw, label=label)
-    ax.axhline(0, color="0.35", lw=0.8)
-    ax.set_ylabel("PCC voltage deviation (%)")
-    ax.set_xlabel("Time (s)")
-    ax.set_title("b  PCC voltage modulation", loc="left", fontsize=11, weight="bold")
-    voltage_text = []
-    for name, values, _ in voltage_series:
-        label = "DC" if name == "Subtransmission DC backbone" else ("Trad." if name == "Traditional AC" else "SST")
-        voltage_text.append(f"{label}: {np.quantile(np.abs(values[win]), 0.95):.2f}%")
-    ax.text(
-        0.02,
-        0.05,
-        "p95 |ΔV|  " + "   ".join(voltage_text),
-        transform=ax.transAxes,
-        fontsize=7,
-        color="0.25",
-        va="bottom",
-    )
-    ax.legend(fontsize=7, frameon=False, loc="lower right")
-    ax.grid(alpha=0.25)
-
-    ax = axes[1, 0]
     order = [
         "Traditional AC",
         "Local SST",
         "Subtransmission DC backbone",
     ]
-    rel = [metrics.loc[o, "relative_to_ac"] * 100 for o in order]
-    ramp = [metrics.loc[o, "p99_ramp_MW_s"] / metrics.loc["Traditional AC", "p99_ramp_MW_s"] * 100 for o in order]
+    short_labels = ["Traditional\nAC", "Local\nSST", "DC\nbackbone"]
+    bar_colors = [COLORS[o] for o in order]
+    ax.axis("off")
+    ax.set_title("b  Grid-side fluctuation metrics", loc="left", fontsize=11, weight="bold")
+    ax_rss = ax.inset_axes([0.06, 0.15, 0.40, 0.70])
+    ax_ramp = ax.inset_axes([0.58, 0.15, 0.38, 0.70])
+    for sub_ax, values, title, ylim in [
+        (ax_rss, [metrics.loc[o, "energy_MW_rss"] for o in order], "0.1-20 Hz RSS\n(MW)", 135),
+        (ax_ramp, [metrics.loc[o, "p99_ramp_MW_s"] for o in order], "p99 ramp\n(MW/s)", 445),
+    ]:
+        xx = np.arange(len(order))
+        sub_ax.bar(xx, values, color=bar_colors, alpha=0.82)
+        for xi, val, color in zip(xx, values, bar_colors):
+            label = f"{val:.1f}" if val < 10 else f"{val:.0f}"
+            sub_ax.text(xi, val + ylim * 0.035, label, ha="center", fontsize=6.4, color=color)
+        sub_ax.set_xticks(xx)
+        sub_ax.set_xticklabels(short_labels, fontsize=6.3)
+        sub_ax.set_ylim(0, ylim)
+        sub_ax.set_title(title, fontsize=7.2)
+        sub_ax.grid(axis="y", alpha=0.18)
+
+    ax = axes[1, 0]
+    voltage_metrics = [
+        np.quantile(np.abs(dyn.pcc_v_ac_pct.to_numpy()[win]), 0.95),
+        np.quantile(np.abs(dyn.pcc_v_local_sst_pct.to_numpy()[win]), 0.95),
+        np.quantile(np.abs(dyn.pcc_v_dc_pct.to_numpy()[win]), 0.95),
+    ]
     x = np.arange(len(order))
-    w = 0.38
-    ax.bar(x - w / 2, rel, width=w, color=[COLORS[o] for o in order], alpha=0.78, label="0.1-20 Hz RSS")
-    ax.bar(x + w / 2, ramp, width=w, color="0.25", alpha=0.62, label="p99 ramp")
+    ax.bar(x, voltage_metrics, color=bar_colors, alpha=0.82)
+    for xi, val, color in zip(x, voltage_metrics, bar_colors):
+        ax.text(xi, val + 0.07, f"{val:.2f}", ha="center", fontsize=7, color=color)
     ax.set_xticks(x)
-    ax.set_xticklabels(["Traditional\nAC", "Local\nSST", "DC\nbackbone"], fontsize=7)
-    ax.set_ylabel("Percent of traditional AC baseline")
-    ax.set_ylim(0, 115)
-    for i, (rss, rramp) in enumerate(zip(rel, ramp)):
-        ax.text(i - w / 2, rss + 3, f"{rss:.0f}" if rss >= 10 else f"{rss:.1f}", ha="center", fontsize=6.5, color=COLORS[order[i]])
-        ax.text(i + w / 2, rramp + 3, f"{rramp:.0f}" if rramp >= 10 else f"{rramp:.1f}", ha="center", fontsize=6.5, color="0.25")
-    ax.set_title("c  Dynamic exposure metrics", loc="left", fontsize=11, weight="bold")
-    ax.legend(fontsize=7, frameon=False)
+    ax.set_xticklabels(short_labels, fontsize=7)
+    ax.set_ylabel("p95 |PCC voltage deviation| (%)")
+    ax.set_ylim(0, 2.65)
+    ax.set_title("c  PCC voltage deviation", loc="left", fontsize=11, weight="bold")
     ax.grid(axis="y", alpha=0.25)
 
     ax = axes[1, 1]
