@@ -1,4 +1,5 @@
 import os, json, math, shutil, zipfile, hashlib, textwrap
+from itertools import product
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -294,6 +295,89 @@ for name,x in [('Traditional AC',P_ac),('AC + active filter/storage',P_ac_bess),
     metrics.append({'architecture':name,**energies[name]})
 metrics.append({'architecture':'DC buffer','energy_window_MWh':E_window,'max_discharge_MW':P_buffer.max(),'max_charge_MW':-P_buffer.min()})
 pd.DataFrame(metrics).to_csv(DATA/'dynamic_metrics_v3.csv',index=False)
+
+# Dynamic robustness grid used in Fig. 4. This uses the same grid definition as
+# the harmonic robustness analysis but evaluates averaged load-dynamics exposure.
+DYN_N_GRID=[1,3,6,10]
+DYN_P_GRID_GW=[0.25,1.0,2.0,4.5]
+DYN_V_GRID_KV=[69,138,230,320]
+DYN_SCR_GRID=[3,5,10,20]
+DYN_PHASE_MODES=['random','partial','coherent']
+DYN_LENGTH_GRID_KM=[5,20,50,100]
+DYN_ARCH_ORDER=['Traditional AC','Local SST','Subtransmission DC backbone']
+DYN_TAU={'Traditional AC':0.0,'Local SST':1.1,'Subtransmission DC backbone':16.0}
+
+def ai_load_pu_shifted(tt):
+    p=np.ones_like(tt,dtype=float)
+    for k in np.arange(-240+5,480,7.0):
+        p-=0.28*np.exp(-0.5*((tt-k)/0.45)**2)
+    for k in np.arange(-240+35,480,70.0):
+        p-=0.23*np.exp(-0.5*((tt-k)/1.2)**2)
+    p+=0.015*np.sin(2*np.pi*0.045*tt)+0.006*np.sin(2*np.pi*0.33*tt+0.4)
+    return np.clip(p,0.48,1.08)
+
+def campus_offsets_dynamic(rng_local,n_campuses,phase_mode):
+    if n_campuses==1:
+        return np.zeros(1)
+    if phase_mode=='coherent':
+        return np.zeros(n_campuses)
+    if phase_mode=='partial':
+        return rng_local.uniform(0,70)+rng_local.normal(0,1.4,size=n_campuses)
+    if phase_mode=='random':
+        return rng_local.uniform(0,70,size=n_campuses)
+    raise ValueError(f'unknown phase mode {phase_mode}')
+
+def aggregate_dynamic_load_1gw(tt,rng_local,n_campuses,phase_mode):
+    offsets=campus_offsets_dynamic(rng_local,n_campuses,phase_mode)
+    campus=np.vstack([ai_load_pu_shifted(tt+offset) for offset in offsets])
+    pu=campus.mean(axis=0)
+    pu=pu/pu.mean()
+    return pu*1000.0
+
+def dynamic_voltage_multiplier(voltage_kv,length_km):
+    raw=1.0+0.08*(length_km/20.0)*(138.0/voltage_kv)**2
+    return raw/(1.0+0.08)
+
+dyn_rng=np.random.default_rng(20260528)
+profile_cache={}
+grid_cache={}
+for n,phase in product(DYN_N_GRID,DYN_PHASE_MODES):
+    load_1gw=aggregate_dynamic_load_1gw(t,dyn_rng,n,phase)
+    profile_cache[(n,phase)]=load_1gw
+    for arch in DYN_ARCH_ORDER:
+        grid_cache[(n,phase,arch)]=lpf(load_1gw,DYN_TAU[arch])
+
+dyn_rows=[]; dyn_input_rows=[]
+for n,p_gw,v_kv,scr,phase,length in product(DYN_N_GRID,DYN_P_GRID_GW,DYN_V_GRID_KV,DYN_SCR_GRID,DYN_PHASE_MODES,DYN_LENGTH_GRID_KM):
+    dyn_input_rows.append({'campus_count':n,'cluster_load_GW':p_gw,'voltage_kV':v_kv,'short_circuit_ratio':scr,'phase_mode':phase,'corridor_length_km':length,'short_circuit_strength_GVA':p_gw*scr})
+    p_nom_mw=p_gw*1000.0; ssc_mw=scr*p_nom_mw; v_mult=dynamic_voltage_multiplier(v_kv,length)
+    load=profile_cache[(n,phase)]*p_gw
+    for arch in DYN_ARCH_ORDER:
+        grid=grid_cache[(n,phase,arch)]*p_gw
+        rss_mw,_,_=spectral_energy(grid)
+        ramp_mw_s=float(np.percentile(np.abs(np.diff(grid)/dt),99))
+        pcc_v_pct=100.0*(grid-grid.mean())/ssc_mw*v_mult
+        row={'architecture':arch,'campus_count':n,'cluster_load_GW':p_gw,'voltage_kV':v_kv,'short_circuit_ratio':scr,'phase_mode':phase,'corridor_length_km':length,'rss_0p1_20hz_MW':rss_mw,'rss_0p1_20hz_pct_load':100.0*rss_mw/p_nom_mw,'p99_ramp_MW_s':ramp_mw_s,'p99_ramp_pct_load_per_s':100.0*ramp_mw_s/p_nom_mw,'p95_pcc_voltage_deviation_pct':float(np.quantile(np.abs(pcc_v_pct),0.95))}
+        if arch=='Subtransmission DC backbone':
+            buffer=load-grid
+            e_mwh=np.cumsum(buffer)*dt/3600.0
+            row.update({'buffer_energy_window_MWh':float(e_mwh.max()-e_mwh.min()),'buffer_energy_window_MWh_per_GW':float((e_mwh.max()-e_mwh.min())/p_gw),'buffer_max_discharge_MW_per_GW':float(buffer.max()/p_gw),'buffer_max_charge_MW_per_GW':float((-buffer.min())/p_gw)})
+        dyn_rows.append(row)
+dynamic_robustness=pd.DataFrame(dyn_rows)
+dynamic_inputs=pd.DataFrame(dyn_input_rows)
+dyn_key=['campus_count','cluster_load_GW','voltage_kV','short_circuit_ratio','phase_mode','corridor_length_km']
+dyn_ramp_wide=dynamic_robustness.pivot_table(index=dyn_key,columns='architecture',values='p99_ramp_pct_load_per_s').reset_index()
+dyn_voltage_wide=dynamic_robustness.pivot_table(index=dyn_key,columns='architecture',values='p95_pcc_voltage_deviation_pct').reset_index()
+dyn_comparison=dyn_ramp_wide.merge(dyn_voltage_wide,on=dyn_key,suffixes=('_ramp_pct_load_per_s','_p95_voltage_pct'))
+dyn_comparison['dc_ramp_reduction_vs_traditional_pct']=(1.0-dyn_comparison['Subtransmission DC backbone_ramp_pct_load_per_s']/dyn_comparison['Traditional AC_ramp_pct_load_per_s'])*100.0
+dyn_comparison['dc_voltage_reduction_vs_traditional_pct']=(1.0-dyn_comparison['Subtransmission DC backbone_p95_voltage_pct']/dyn_comparison['Traditional AC_p95_voltage_pct'])*100.0
+dyn_summary=[]
+for arch,d in dynamic_robustness.groupby('architecture'):
+    dyn_summary.append({'group':'architecture','level':arch,'n_scenarios':len(d),'median_p99_ramp_pct_load_per_s':d['p99_ramp_pct_load_per_s'].median(),'p95_p99_ramp_pct_load_per_s':d['p99_ramp_pct_load_per_s'].quantile(0.95),'median_p95_pcc_voltage_deviation_pct':d['p95_pcc_voltage_deviation_pct'].median(),'p95_p95_pcc_voltage_deviation_pct':d['p95_pcc_voltage_deviation_pct'].quantile(0.95)})
+dynamic_inputs.to_csv(DATA/'dynamic_robustness_input_grid_v3.csv',index=False)
+dynamic_robustness.to_csv(DATA/'dynamic_robustness_scenario_grid_v3.csv',index=False)
+dyn_comparison.to_csv(DATA/'dynamic_robustness_architecture_comparison_v3.csv',index=False)
+pd.DataFrame(dyn_summary).to_csv(DATA/'dynamic_robustness_summary_v3.csv',index=False)
 
 # Validation: timestep convergence and sinusoidal transfer function
 conv_rows=[]
@@ -669,33 +753,29 @@ def figure4():
         key={'DC backbone':'Subtransmission DC backbone'}.get(label,label)
         ax.plot(t[win],xdat[win],color=colors_d[key],lw=lw,label=label)
     ax.set_ylabel('Grid-side power (MW)'); ax.set_xlabel('Time (s)'); ax.set_title('a  Grid-side power seen by the utility',loc='left',fontsize=11,weight='bold'); ax.legend(fontsize=7,ncol=1,frameon=False,loc='lower right'); ax.grid(alpha=0.25)
-    ax=axes[0,1]
     order=['Traditional AC','Local SST','Subtransmission DC backbone']
-    short_labels=['Traditional\nAC','Local\nSST','DC\nbackbone']
-    bar_colors=[colors_d[o] for o in order]
-    ax.axis('off')
-    ax.set_title('b  Grid-side fluctuation metrics',loc='left',fontsize=11,weight='bold')
-    ax_rss=ax.inset_axes([0.06,0.15,0.40,0.70])
-    ax_ramp=ax.inset_axes([0.58,0.15,0.38,0.70])
-    for sub_ax,values,title,ylim in [
-        (ax_rss,[energies[o]['energy_MW_rss'] for o in order],'0.1-20 Hz RSS\n(MW)',135),
-        (ax_ramp,[energies[o]['p99_ramp_MW_s'] for o in order],'p99 ramp\n(MW/s)',445),
-    ]:
-        xx=np.arange(len(order))
-        sub_ax.bar(xx,values,color=bar_colors,alpha=0.82)
-        for xi,val,color in zip(xx,values,bar_colors):
-            sub_ax.text(xi,val+ylim*0.035,f'{val:.1f}' if val<10 else f'{val:.0f}',ha='center',fontsize=6.4,color=color)
-        sub_ax.set_xticks(xx); sub_ax.set_xticklabels(short_labels,fontsize=6.3)
-        sub_ax.set_ylim(0,ylim); sub_ax.set_title(title,fontsize=7.2); sub_ax.grid(axis='y',alpha=0.18)
+    def plot_envelope(ax,column,xlabel,title,xscale=None,xlim=None,xticks=None,label_format='{:.1f}'):
+        y_positions=np.arange(len(order))[::-1]
+        labels=['Traditional AC','Local SST','DC backbone']
+        for y_pos,name in zip(y_positions,order):
+            values=dynamic_robustness.loc[dynamic_robustness.architecture==name,column].to_numpy()
+            q05,q50,q95=np.quantile(values,[0.05,0.50,0.95])
+            ax.hlines(y_pos,q05,q95,color=colors_d[name],lw=5.5,alpha=0.38)
+            ax.plot(q50,y_pos,marker='o',ms=6.5,color=colors_d[name],markeredgecolor='white',markeredgewidth=0.7)
+            text_x=q50*1.08 if xscale=='log' else q50+(xlim[1]-xlim[0])*0.025
+            ax.text(text_x,y_pos,label_format.format(q50),va='center',fontsize=7,color=colors_d[name])
+        if xscale: ax.set_xscale(xscale)
+        if xlim: ax.set_xlim(*xlim)
+        if xticks:
+            ax.set_xticks(xticks); ax.set_xticklabels([str(x) for x in xticks],fontsize=7)
+        ax.set_yticks(y_positions); ax.set_yticklabels(labels,fontsize=7); ax.set_ylim(-0.7,len(order)-0.3)
+        ax.set_xlabel(xlabel)
+        ax.set_title(title,loc='left',fontsize=11,weight='bold'); ax.grid(alpha=0.25)
+        ax.text(0.02,0.08,'line: 5-95% scenarios\ndot: median',transform=ax.transAxes,fontsize=6.8,color='0.35')
+    ax=axes[0,1]
+    plot_envelope(ax,'rss_0p1_20hz_MW','0.1-20 Hz grid fluctuation RSS (MW)','b  Scenario-grid fluctuation envelope',xscale='log',xlim=(0.5,800),xticks=[1,10,100])
     ax=axes[1,0]
-    voltage_metrics=[np.quantile(np.abs(pcc_v_ac[win]),0.95),np.quantile(np.abs(pcc_v_sst[win]),0.95),np.quantile(np.abs(pcc_v_dc[win]),0.95)]
-    x=np.arange(len(order))
-    ax.bar(x,voltage_metrics,color=bar_colors,alpha=0.82)
-    for xi,val,color in zip(x,voltage_metrics,bar_colors):
-        ax.text(xi,val+0.07,f'{val:.2f}',ha='center',fontsize=7,color=color)
-    ax.set_xticks(x); ax.set_xticklabels(short_labels,fontsize=7)
-    ax.set_ylabel('p95 |PCC voltage deviation| (%)'); ax.set_ylim(0,2.65)
-    ax.set_title('c  PCC voltage deviation',loc='left',fontsize=11,weight='bold'); ax.grid(axis='y',alpha=0.25)
+    plot_envelope(ax,'p95_pcc_voltage_deviation_pct','p95 |PCC voltage deviation| (%)','c  Scenario-grid voltage envelope',xlim=(0,8.5),label_format='{:.2f}')
     ax=axes[1,1]
     ax.plot(t[win],P_buffer[win],color='#e6550d',lw=1.4)
     ax.fill_between(t[win],0,P_buffer[win],where=P_buffer[win]>=0,color='#e6550d',alpha=0.16,interpolate=True)
@@ -867,7 +947,7 @@ We quantify this ownership change with an OpenDSS-ready network and a reproduced
 For the central assumptions, the 95th-percentile PCC voltage THD is 3.95% for traditional AC, 1.55% for local SSTs and 0.78% for the DC backbone (Fig. 3b). Adding active filtering or storage to the traditional AC case improves the metric, and coordinated control improves the local-SST case, but neither changes the number of AC-facing interfaces. These values are screening metrics, not a substitute for project-specific IEEE 519 compliance studies [8]. Their purpose is narrower and architectural: moving DC upstream changes a distributed compliance problem into a single utility-owned terminal design problem."""),
 ("The DC backbone buffers synchronized AI-load voltage dynamics", """The third benefit is voltage stabilization under synchronized AI training loads. We construct a synthetic but literature-parameterized 1 GW AI training waveform with repeated compute phases, communication dips and checkpointing events. The traditional AC case passes this waveform directly to the grid. The local-SST case applies limited smoothing. Stronger baselines add substation storage or coordinated SST controls. The DC-backbone case uses a slower grid-facing power command and assigns the difference between the AI load and the grid command to a shared DC buffer.
 
-In the reference waveform, the 0.1-20 Hz grid-side root-sum-square spectral magnitude falls from 123 MW for traditional AC to 72 MW for local SSTs and 7.3 MW for the DC backbone, while the p99 ramp rate falls from 404 MW s-1 to 16.6 MW s-1 (Fig. 4b). The 95th-percentile PCC voltage deviation falls from 2.23% for traditional AC to 0.24% for the DC backbone in the same averaged model (Fig. 4c). The shared buffer must absorb up to 317 MW, deliver up to 102 MW and span an energy window of 0.42 MWh for this waveform (Fig. 4d). This is a high-power, low-energy requirement. It should not be interpreted as a single large battery; rather, the DC backbone creates the electrical layer where GPU power smoothing, rack or row storage, supercapacitors, station storage and grid-facing converter control can be coordinated.
+Across a 3,072-case dynamic robustness grid spanning campus count, cluster load, voltage class, short-circuit ratio, phase coherence and corridor length, the median 0.1-20 Hz grid-side root-sum-square spectral magnitude is 126 MW for traditional AC, 74 MW for local SSTs and 8.3 MW for the DC backbone (Fig. 4b). The median 95th-percentile PCC voltage deviation is 2.03%, 1.29% and 0.35%, respectively (Fig. 4c). In the 1 GW reference waveform, the shared buffer must absorb up to 317 MW, deliver up to 102 MW and span an energy window of 0.42 MWh (Fig. 4d). This is a high-power, low-energy requirement. It should not be interpreted as a single large battery; rather, the DC backbone creates the electrical layer where GPU power smoothing, rack or row storage, supercapacitors, station storage and grid-facing converter control can be coordinated.
 
 The voltage metrics in Fig. 4 are averaged EMT proxies. They are designed to compare architecture-level exposure, not to replace detailed EMT studies. We therefore include state equations, transfer-function validation and time-step convergence in the Supplementary Information. The result is that the DC backbone is not only an energy-delivery architecture; it is a dynamic electrical buffer between synchronized GPU computation and the AC grid."""),
 ("Data-center load pockets are becoming planning objects", """The proposed architecture is motivated by load pockets that are large, concentrated and data-center driven. Public planning documents for the San Jose area show a load pocket growing from approximately 2.1 GW in an earlier study case to 3.4 GW in a later base case and 4.2 GW in a sensitivity case (Fig. 5a) [9-12]. This paper does not claim that a specific planned HVDC project is a 138 kV DC AI-factory backbone. The point is that data-center-driven load pockets are already large enough to motivate controllable transmission solutions.
@@ -886,14 +966,14 @@ methods = [
 ("Architecture boundary", """The evaluation boundary begins at the grid-facing/subtransmission supply point and ends at the 800 VDC data-center interface. The traditional AC case uses a 138 kV AC corridor and downstream AC distribution before conversion to 800 VDC. The local-SST case uses the same AC corridor but converts at each campus using an SST. The proposed case uses a grid-facing AC/DC terminal, a bipolar subtransmission DC corridor, DC/DC conversion to a 34.5 kV DC distribution layer and DC/DC conversion to 800 VDC. The central reference system is a 1 GW three-campus cluster served over a 20 km equivalent corridor. The DC design point is +/-138 kV, or 276 kV pole-to-pole."""),
 ("Efficiency calculation", """For AC cases, the receiving-end corridor power is P_recv = P/eta_downstream, where P is the useful 800 VDC load and eta_downstream is the downstream conversion efficiency. Corridor current is I_AC = P_recv/(sqrt(3) V_LL pf), AC line loss is 3 I_AC^2 R, grid input is P_recv plus line loss, and total loss is grid input minus P. For the DC case, receiving-end corridor power is P_recv = P/(eta_DC/DC,1 eta_DC/DC,2), bipole current is I_DC = P_recv/V_pp, line loss is 2 I_DC^2 R, grid input is (P_recv plus line loss)/eta_AC/DC, and total loss is grid input minus P. Central assumptions and the 99.0% local-SST efficiency sensitivity case are listed in Supplementary Table 1, and uncertainty ranges are encoded in the public repository."""),
 ("Harmonic screening and OpenDSS-ready network", """The harmonic model is a frequency-domain screening model. It represents the 138 kV grid by a 10 GVA Thevenin short-circuit strength, three corridor buses and harmonic-dependent source impedance with resonance amplification. OpenDSS-compatible circuit files and archived OpenDSSDirect.py harmonic-run artifacts are included in the repository. The figure-generation script also includes an independent nodal-frequency solver that uses the same equivalent network and harmonic spectra, so the screening result can be reproduced without a proprietary EMT tool. The output metrics are PCC voltage THD and individual harmonic voltage distortion. Parameter provenance is summarized in Supplementary Table 1; measured literature values, public planning data and study assumptions are separated in the public data tables."""),
-("Averaged EMT-style model", """The dynamic waveform is synthetic but parameterized from the published structure of AI training power traces: compute phases with high accelerator utilization, periodic communication dips and less frequent checkpointing dips [7]. The traditional AC case passes the waveform directly to the grid. The local-SST case applies a 1.1 s first-order smoothing function. The DC-backbone case applies a 16 s grid-facing power command; the difference between the AI load and the commanded grid power defines shared DC-buffer power. Supplementary Note 2 gives the averaged state equations and validates the first-order command model by time-step convergence and transfer-function tests. This is an averaged EMT-style comparison of architecture-level exposure, not a switching EMT validation of a specific converter design."""),
+("Averaged EMT-style model", """The dynamic waveform is synthetic but parameterized from the published structure of AI training power traces: compute phases with high accelerator utilization, periodic communication dips and less frequent checkpointing dips [7]. The traditional AC case passes the waveform directly to the grid. The local-SST case applies a 1.1 s first-order smoothing function. The DC-backbone case applies a 16 s grid-facing power command; the difference between the AI load and the commanded grid power defines shared DC-buffer power. The dynamic robustness grid repeats this averaged model across campus count N = 1, 3, 6 and 10; cluster load P = 0.25, 1, 2 and 4.5 GW; voltage class 69, 138, 230 and 320 kV; short-circuit ratio Ssc/P = 3, 5, 10 and 20; random, partial and coherent temporal phase alignment; and corridor lengths of 5, 20, 50 and 100 km. Supplementary Note 2 gives the averaged state equations and validates the first-order command model by time-step convergence and transfer-function tests. This is an averaged EMT-style comparison of architecture-level exposure, not a switching EMT validation of a specific converter design."""),
 ("Protection-zone screening", """Representative protection dynamics are simulated for a backbone pole-to-ground fault and a campus DC/DC internal fault. The model includes detection, converter current limiting, breaker opening, section isolation and healthy-campus re-energization. It is intended to check plausibility and expose the required protection functions; it is not a validated DC-breaker or insulation-coordination design.""")]
 
 figure_legends = {
 'Fig. 1 | Three power-delivery architectures for AI factories.':'Orange lines denote AC sections and blue lines denote DC sections. a, Traditional AC delivery keeps AC in the subtransmission and facility distribution system before conversion to the 800 VDC data-center boundary. b, Local SST delivery uses the same AC corridor but converts at each AI campus, with AC input and DC output shown explicitly. c, The proposed architecture moves the AC/DC boundary upstream and feeds multiple campuses from a utility-operated subtransmission DC backbone, with DC/DC conversion to 34.5 kV DC and then to 800 VDC.',
 'Fig. 2 | Efficiency, uncertainty and design space.':'a, Central 1 GW, 20 km reference-case corridor and conversion losses with end-to-end efficiencies to the 800 VDC boundary; bar colours denote loss components, not AC/DC sections. b, Monte Carlo uncertainty at the reference point. c, Load-distance sweep showing where the DC-backbone loss advantage over traditional AC exceeds 10, 50 and 100 MW. d, One-at-a-time sensitivity of the central saving. A 99.0% local-SST efficiency sensitivity case is reported in the text and Supplementary Table 1.',
 'Fig. 3 | Harmonic ownership and OpenDSS-ready screening.':'a, Harmonic ownership boundary for distributed AC-facing converter cases versus the proposed single utility AC/DC terminal. b, Monte Carlo PCC voltage THD for the three architectures and two stronger baselines, with a 5% planning guide shown for context. c, 95th-percentile individual harmonic voltage distortion. d, Direct OpenDSS harmonic solve compared with the internal nodal-frequency solver.',
-'Fig. 4 | Voltage stabilization of synchronized AI training loads.':'a, Grid-side power seen by the utility for the three architecture scenarios. b, Absolute grid-side fluctuation metrics: 0.1-20 Hz root-sum-square spectral magnitude and 99th-percentile ramp rate. c, 95th-percentile absolute PCC-voltage deviation in the averaged model. d, Shared DC-buffer power and energy window required for the reference waveform.',
+'Fig. 4 | Voltage stabilization of synchronized AI training loads.':'a, Grid-side power seen by the utility for the 1 GW reference waveform. b, Scenario-grid envelope of 0.1-20 Hz grid-side root-sum-square spectral magnitude across the 3,072-case dynamic robustness grid; line segments show 5th-95th percentiles and dots show medians. c, Scenario-grid envelope of 95th-percentile absolute PCC-voltage deviation across the same grid. d, Shared DC-buffer power and energy window required for the reference waveform.',
 'Fig. 5 | Data-center load pockets and voltage-class envelope.':'a, CAISO San Jose area planning data showing a public multi-GW load-pocket precedent. b, Single-bipole current as a function of cluster load for candidate DC voltage classes; the 1 GW reference point and 3.4-4.2 GW public planning precedent show why voltage class, circuit count or both must scale with load.'}
 
 data_availability = """All inputs and outputs used to generate Figs. 2-5 and Supplementary Figs. S1-S4 are included in the accompanying reproducibility package as CSV files. Public external data are cited in the References. No restricted operational data are used. Before journal submission, this package should be deposited in Zenodo and this statement should be updated with the final DOI."""
@@ -1069,7 +1149,7 @@ def create_supp_docx():
         cells=table.add_row().cells
         for i,k in enumerate(['parameter','value','role','source']): cells[i].text=str(row[k])
     doc.add_heading('Supplementary Note 2. Averaged EMT equations and validation',level=1)
-    add_para(doc,'The dynamic model is an averaged, architecture-level representation. The AI load is P_L(t). The grid-facing command P_g follows dP_g/dt = (P_L - P_g)/tau. The shared buffer power is P_b = P_L - P_g, and the buffer energy state is the time integral of P_b. The voltage proxy combines grid-stiffness and local droop terms. These equations compare exposure between architectures and are not a replacement for switching EMT models.')
+    add_para(doc,'The dynamic model is an averaged, architecture-level representation. The AI load is P_L(t). The grid-facing command P_g follows dP_g/dt = (P_L - P_g)/tau. The shared buffer power is P_b = P_L - P_g, and the buffer energy state is the time integral of P_b. The scenario grid varies campus count, cluster load, voltage class, short-circuit ratio, temporal phase coherence and corridor length. The voltage proxy combines grid-stiffness and corridor-voltage factors. These equations compare exposure between architectures and are not a replacement for switching EMT models.')
     add_fig(doc, FIG/'supp_fig_s2_averaged_emt_validation_v3.png', 'Supplementary Fig. S2 | Averaged EMT validation. Time-step convergence and first-order transfer-function validation for the grid-command model used in Fig. 4.')
     doc.add_heading('Supplementary Note 3. Protection-zone screening',level=1)
     add_para(doc,'The DC protection study represents detection, converter current limiting, breaker opening, section isolation and re-energization. It is included to expose the functions required by the architecture. It does not specify breaker hardware, insulation coordination or a validated relay scheme.')
@@ -1137,10 +1217,11 @@ if (source_scripts/'run_true_opendss.py').exists():
     def note():
         return 'Use this module for the transparent nodal frequency-domain solver. OpenDSS-compatible files are in opendss/.'
 '''))
-source_reproduce = Path(__file__).resolve().with_name('reproduce_all.py')
-if source_reproduce.exists():
-    shutil.copy(source_reproduce, REPO/'scripts'/'reproduce_all.py')
-else:
+for helper in ['reproduce_all.py','dynamic_robustness_sweep.py','harmonic_robustness_sweep.py']:
+    source_helper=Path(__file__).resolve().with_name(helper)
+    if source_helper.exists():
+        shutil.copy(source_helper,REPO/'scripts'/helper)
+if not (REPO/'scripts'/'reproduce_all.py').exists():
     (REPO/'scripts'/'reproduce_all.py').write_text("print('Run scripts/build_dc_backbone_v3.py to rebuild the manuscript package.')\n")
 (REPO/'scripts'/'run_opendss_if_available.py').write_text(textwrap.dedent('''
     #!/usr/bin/env python
@@ -1178,14 +1259,19 @@ else:
     ## Reproducing results
     ```bash
     python scripts/reproduce_all.py
+    python scripts/dynamic_robustness_sweep.py
+    python scripts/harmonic_robustness_sweep.py
     python scripts/run_opendss_if_available.py  # optional, requires opendssdirect.py
     ```
 
-    `scripts/reproduce_all.py` regenerates Fig. 3 and Fig. 4 from the archived CSV
-    outputs into `reproduced/figures`. The manuscript figures were generated with
-    transparent Python models. Fig. 3 includes direct OpenDSSDirect.py harmonic-run
-    artifacts and an internal nodal-frequency solver check. OpenDSS circuit files
-    and the run log are included under `opendss/`.
+    `scripts/reproduce_all.py` regenerates the archived OpenDSS Fig. 3 diagnostic,
+    Fig. 4 and Fig. 5 from archived CSV outputs into `reproduced/figures`.
+    `scripts/dynamic_robustness_sweep.py` regenerates the full dynamic scenario
+    grid used for the Fig. 4 fluctuation and voltage envelopes.
+    `scripts/harmonic_robustness_sweep.py` regenerates the final two-panel Fig. 3
+    and the full harmonic robustness grid. The manuscript figures were generated
+    with transparent Python models. OpenDSS circuit files and the run log are
+    included under `opendss/`.
 
     ## Citation
     See `CITATION.cff`. This repository is structured for GitHub release and Zenodo deposition.
@@ -1218,20 +1304,35 @@ else:
 (REPO/'requirements.txt').write_text('numpy\npandas\nmatplotlib\npython-docx\n')
 (REPO/'environment.yml').write_text('name: dc-backbone-ai-factories\nchannels:\n  - conda-forge\ndependencies:\n  - python>=3.10\n  - numpy\n  - pandas\n  - matplotlib\n  - python-docx\n')
 (REPO/'docs'/'reproduction.md').write_text(textwrap.dedent('''
-    This repository is structured for public release. To regenerate the two
-    highest-risk manuscript figures from archived CSV outputs, run:
+    This repository is structured for public release. To regenerate the archived
+    OpenDSS Fig. 3 diagnostic, Fig. 4 and Fig. 5 from archived CSV outputs, run:
 
     ```bash
     python scripts/reproduce_all.py
     ```
 
-    The script writes Fig. 3 and Fig. 4 to `reproduced/figures`. OpenDSSDirect.py
+    The script writes the diagnostic Fig. 3, Fig. 4 and Fig. 5 to
+    `reproduced/figures`. OpenDSSDirect.py
     harmonic-run artifacts are archived under `opendss/` and
     `data/true_opendss_*`. To rerun OpenDSS in a local environment with
     OpenDSSDirect.py installed, run:
 
     ```bash
     python scripts/run_true_opendss.py
+    ```
+
+    To regenerate the dynamic robustness grid used for the Fig. 4 fluctuation and
+    voltage envelopes, run:
+
+    ```bash
+    python scripts/dynamic_robustness_sweep.py
+    ```
+
+    To regenerate the final two-panel Fig. 3, the full harmonic robustness sweep,
+    Supplementary Figs. S5-S6 and the supporting CSV tables, run:
+
+    ```bash
+    python scripts/harmonic_robustness_sweep.py
     ```
 
     The complete manuscript-package generator is `scripts/build_dc_backbone_v3.py`.
@@ -1250,6 +1351,10 @@ else:
     SVG and PDF files are Matplotlib exports. The SVG files can be inspected as
     vector graphics, and `scripts/reproduce_all.py` regenerates Fig. 3 and Fig. 4
     from source CSV files as a fast submission check.
+    `scripts/dynamic_robustness_sweep.py` regenerates the Fig. 4 dynamic scenario
+    grid and supporting CSV tables.
+    `scripts/harmonic_robustness_sweep.py` regenerates the final two-panel Fig. 3,
+    the harmonic robustness screening figures and the supporting CSV tables.
 
     Final figure files:
 
@@ -1262,6 +1367,8 @@ else:
     - Supplementary Fig. S2: `figures/supp_fig_s2_averaged_emt_validation_v3.{png,svg}`
     - Supplementary Fig. S3: `figures/supp_fig_s3_buffer_feasibility_v3.{png,svg}`
     - Supplementary Fig. S4: `figures/supp_fig_s4_cost_copper_envelope_v3.{png,svg}`
+    - Supplementary Fig. S5: `figures/supp_fig_s5_harmonic_robustness_envelope_v3.{png,svg}`
+    - Supplementary Fig. S6: `figures/supp_fig_s6_harmonic_sourcecount_phase_sensitivity_v3.{png,svg}`
 ''').lstrip())
 (REPO/'docs'/'ai_assisted_drafting_disclosure.md').write_text(textwrap.dedent(f'''
     # AI-assisted drafting disclosure

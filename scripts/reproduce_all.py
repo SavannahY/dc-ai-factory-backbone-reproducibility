@@ -4,8 +4,9 @@
 This public repository includes all source CSV files used for the manuscript
 figures. Running this script rebuilds the archived OpenDSS Fig. 3 diagnostic,
 Fig. 4 and Fig. 5 into ``reproduced/figures`` as a fast submission-time
-reproducibility check. The final two-panel Fig. 3 and harmonic robustness sweep
-are regenerated with ``scripts/harmonic_robustness_sweep.py``.
+reproducibility check. The Fig. 4 dynamic scenario grid is regenerated with
+``scripts/dynamic_robustness_sweep.py``; the final two-panel Fig. 3 and harmonic
+robustness sweep are regenerated with ``scripts/harmonic_robustness_sweep.py``.
 """
 import os
 import tempfile
@@ -165,6 +166,7 @@ def figure3():
 def figure4():
     dyn = pd.read_csv(DATA / "dynamic_timeseries_v3.csv")
     metrics = pd.read_csv(DATA / "dynamic_metrics_v3.csv").set_index("architecture")
+    robustness = pd.read_csv(DATA / "dynamic_robustness_scenario_grid_v3.csv")
     t = dyn.time_s.to_numpy()
     dt = float(np.median(np.diff(t)))
     win = (t >= 25) & (t <= 95)
@@ -192,49 +194,57 @@ def figure4():
     ax.legend(fontsize=7, ncol=1, frameon=False, loc="lower right")
     ax.grid(alpha=0.25)
 
-    ax = axes[0, 1]
     order = [
         "Traditional AC",
         "Local SST",
         "Subtransmission DC backbone",
     ]
-    short_labels = ["Traditional\nAC", "Local\nSST", "DC\nbackbone"]
-    bar_colors = [COLORS[o] for o in order]
-    ax.axis("off")
-    ax.set_title("b  Grid-side fluctuation metrics", loc="left", fontsize=11, weight="bold")
-    ax_rss = ax.inset_axes([0.06, 0.15, 0.40, 0.70])
-    ax_ramp = ax.inset_axes([0.58, 0.15, 0.38, 0.70])
-    for sub_ax, values, title, ylim in [
-        (ax_rss, [metrics.loc[o, "energy_MW_rss"] for o in order], "0.1-20 Hz RSS\n(MW)", 135),
-        (ax_ramp, [metrics.loc[o, "p99_ramp_MW_s"] for o in order], "p99 ramp\n(MW/s)", 445),
-    ]:
-        xx = np.arange(len(order))
-        sub_ax.bar(xx, values, color=bar_colors, alpha=0.82)
-        for xi, val, color in zip(xx, values, bar_colors):
-            label = f"{val:.1f}" if val < 10 else f"{val:.0f}"
-            sub_ax.text(xi, val + ylim * 0.035, label, ha="center", fontsize=6.4, color=color)
-        sub_ax.set_xticks(xx)
-        sub_ax.set_xticklabels(short_labels, fontsize=6.3)
-        sub_ax.set_ylim(0, ylim)
-        sub_ax.set_title(title, fontsize=7.2)
-        sub_ax.grid(axis="y", alpha=0.18)
+
+    def plot_envelope(ax, column, xlabel, title, xscale=None, xlim=None, xticks=None, label_format="{:.1f}"):
+        y_positions = np.arange(len(order))[::-1]
+        labels = ["Traditional AC", "Local SST", "DC backbone"]
+        for y_pos, name in zip(y_positions, order):
+            values = robustness.loc[robustness.architecture == name, column].to_numpy()
+            q05, q50, q95 = np.quantile(values, [0.05, 0.50, 0.95])
+            ax.hlines(y_pos, q05, q95, color=COLORS[name], lw=5.5, alpha=0.38)
+            ax.plot(q50, y_pos, marker="o", ms=6.5, color=COLORS[name], markeredgecolor="white", markeredgewidth=0.7)
+            text_x = q50 * 1.08 if xscale == "log" else q50 + (xlim[1] - xlim[0]) * 0.025
+            ax.text(text_x, y_pos, label_format.format(q50), va="center", fontsize=7, color=COLORS[name])
+        if xscale:
+            ax.set_xscale(xscale)
+        if xlim:
+            ax.set_xlim(*xlim)
+        if xticks:
+            ax.set_xticks(xticks)
+            ax.set_xticklabels([str(x) for x in xticks], fontsize=7)
+        ax.set_yticks(y_positions)
+        ax.set_yticklabels(labels, fontsize=7)
+        ax.set_ylim(-0.7, len(order) - 0.3)
+        ax.set_xlabel(xlabel)
+        ax.set_title(title, loc="left", fontsize=11, weight="bold")
+        ax.grid(alpha=0.25)
+        ax.text(0.02, 0.08, "line: 5-95% scenarios\ndot: median", transform=ax.transAxes, fontsize=6.8, color="0.35")
+
+    ax = axes[0, 1]
+    plot_envelope(
+        ax,
+        "rss_0p1_20hz_MW",
+        "0.1-20 Hz grid fluctuation RSS (MW)",
+        "b  Scenario-grid fluctuation envelope",
+        xscale="log",
+        xlim=(0.5, 800),
+        xticks=[1, 10, 100],
+    )
 
     ax = axes[1, 0]
-    voltage_metrics = [
-        np.quantile(np.abs(dyn.pcc_v_ac_pct.to_numpy()[win]), 0.95),
-        np.quantile(np.abs(dyn.pcc_v_local_sst_pct.to_numpy()[win]), 0.95),
-        np.quantile(np.abs(dyn.pcc_v_dc_pct.to_numpy()[win]), 0.95),
-    ]
-    x = np.arange(len(order))
-    ax.bar(x, voltage_metrics, color=bar_colors, alpha=0.82)
-    for xi, val, color in zip(x, voltage_metrics, bar_colors):
-        ax.text(xi, val + 0.07, f"{val:.2f}", ha="center", fontsize=7, color=color)
-    ax.set_xticks(x)
-    ax.set_xticklabels(short_labels, fontsize=7)
-    ax.set_ylabel("p95 |PCC voltage deviation| (%)")
-    ax.set_ylim(0, 2.65)
-    ax.set_title("c  PCC voltage deviation", loc="left", fontsize=11, weight="bold")
-    ax.grid(axis="y", alpha=0.25)
+    plot_envelope(
+        ax,
+        "p95_pcc_voltage_deviation_pct",
+        "p95 |PCC voltage deviation| (%)",
+        "c  Scenario-grid voltage envelope",
+        xlim=(0, 8.5),
+        label_format="{:.2f}",
+    )
 
     ax = axes[1, 1]
     buffer_power = dyn.dc_buffer_power_MW.to_numpy()

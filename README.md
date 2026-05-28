@@ -14,17 +14,21 @@ This repository contains the data, screening models, figures and OpenDSS-compati
 ## Reproducing results
 ```bash
 python scripts/reproduce_all.py
+python scripts/dynamic_robustness_sweep.py
 python scripts/harmonic_robustness_sweep.py
 python scripts/run_opendss_if_available.py  # optional, requires opendssdirect.py
 ```
 
 `scripts/reproduce_all.py` regenerates the archived OpenDSS Fig. 3 diagnostic,
 Fig. 4 and Fig. 5 from archived CSV outputs into `reproduced/figures`.
+`scripts/dynamic_robustness_sweep.py` regenerates the full dynamic scenario grid
+used for the Fig. 4 fluctuation and voltage envelopes.
 `scripts/harmonic_robustness_sweep.py` regenerates the final two-panel Fig. 3
 and the full harmonic robustness grid across campus count, cluster load, voltage
 class, short-circuit ratio, phase coherence and corridor length. The manuscript
 figures were generated with transparent Python models. The broader robustness
-envelope is archived as Supplementary Figs. S5-S6 and CSV tables under `data/`.
+envelopes are archived as CSV tables under `data/` and, for harmonics, as
+Supplementary Figs. S5-S6.
 OpenDSS circuit files and the run log are included under `opendss/`.
 
 ## Citation

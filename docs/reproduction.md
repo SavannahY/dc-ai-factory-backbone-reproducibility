@@ -15,6 +15,13 @@ OpenDSSDirect.py installed, run:
 python scripts/run_true_opendss.py
 ```
 
+To regenerate the dynamic robustness grid used for the Fig. 4 fluctuation and
+voltage envelopes, run:
+
+```bash
+python scripts/dynamic_robustness_sweep.py
+```
+
 To regenerate the final two-panel Fig. 3, the full harmonic robustness sweep,
 Supplementary Figs. S5-S6 and the supporting CSV tables, run:
 
@@ -22,9 +29,9 @@ Supplementary Figs. S5-S6 and the supporting CSV tables, run:
 python scripts/harmonic_robustness_sweep.py
 ```
 
-This sweep evaluates 3,072 input-grid points and 9,216 architecture cases across
-campus count, cluster load, voltage class, short-circuit ratio, phase coherence
-and corridor length.
+The dynamic and harmonic sweeps each evaluate 3,072 input-grid points and 9,216
+architecture cases across campus count, cluster load, voltage class,
+short-circuit ratio, phase coherence and corridor length.
 
 The complete manuscript-package generator is `scripts/build_dc_backbone_v3.py`.
 It is retained for auditability and can be used to rebuild the full manuscript
