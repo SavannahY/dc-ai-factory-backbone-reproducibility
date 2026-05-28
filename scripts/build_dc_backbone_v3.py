@@ -452,7 +452,10 @@ buffer_table.to_csv(DATA/'buffer_physical_feasibility_table_v3.csv',index=False)
 # ---------------------------- Figures ----------------------------
 def savefig(fig, name):
     for ext in ['png','svg','pdf']:
-        fig.savefig(FIG/f'{name}.{ext}', dpi=300, bbox_inches='tight')
+        path=FIG/f'{name}.{ext}'
+        fig.savefig(path, dpi=300, bbox_inches='tight')
+        if ext=='svg':
+            path.write_text('\n'.join(line.rstrip() for line in path.read_text().splitlines())+'\n')
     plt.close(fig)
 
 def draw_icon(ax, x, y, kind, scale=1.0):
@@ -745,45 +748,48 @@ figure3()
 
 # Figure 4
 def figure4():
-    fig,axes=plt.subplots(2,2,figsize=(11,7.8))
+    fig=plt.figure(figsize=(11,7.25))
+    gs=fig.add_gridspec(2,2,width_ratios=[1.28,1.0],height_ratios=[1.0,1.05],left=0.07,right=0.98,bottom=0.08,top=0.95,hspace=0.50,wspace=0.34)
+    ax_power=fig.add_subplot(gs[0,0]); ax_robust=fig.add_subplot(gs[0,1]); ax_buffer=fig.add_subplot(gs[1,:])
     colors_d={'Traditional AC':'#377eb8','AC + active filter/storage':'#80b1d3','Local SST':'#984ea3','Local SST + coordinated control':'#bc80bd','Subtransmission DC backbone':'#e6550d'}
     win=(t>=25)&(t<=95)
-    ax=axes[0,0]
+    ax=ax_power
     for label,xdat,lw in [('Traditional AC',P_ac,1.0),('Local SST',P_sst,1.25),('DC backbone',P_dc,2.0)]:
         key={'DC backbone':'Subtransmission DC backbone'}.get(label,label)
         ax.plot(t[win],xdat[win],color=colors_d[key],lw=lw,label=label)
     ax.set_ylabel('Grid-side power (MW)'); ax.set_xlabel('Time (s)'); ax.set_title('a  Grid-side power seen by the utility',loc='left',fontsize=11,weight='bold'); ax.legend(fontsize=7,ncol=1,frameon=False,loc='lower right'); ax.grid(alpha=0.25)
     order=['Traditional AC','Local SST','Subtransmission DC backbone']
-    def plot_envelope(ax,column,xlabel,title,xscale=None,xlim=None,xticks=None,label_format='{:.1f}'):
+    def plot_envelope(ax,column,xlabel,xscale=None,xlim=None,xticks=None,label_format='{:.1f}'):
         y_positions=np.arange(len(order))[::-1]
-        labels=['Traditional AC','Local SST','DC backbone']
+        labels=['Trad. AC','Local SST','DC backbone']
         for y_pos,name in zip(y_positions,order):
             values=dynamic_robustness.loc[dynamic_robustness.architecture==name,column].to_numpy()
             q05,q50,q95=np.quantile(values,[0.05,0.50,0.95])
-            ax.hlines(y_pos,q05,q95,color=colors_d[name],lw=5.5,alpha=0.38)
-            ax.plot(q50,y_pos,marker='o',ms=6.5,color=colors_d[name],markeredgecolor='white',markeredgewidth=0.7)
+            ax.hlines(y_pos,q05,q95,color=colors_d[name],lw=5.0,alpha=0.38)
+            ax.plot(q50,y_pos,marker='o',ms=5.8,color=colors_d[name],markeredgecolor='white',markeredgewidth=0.7)
             text_x=q50*1.08 if xscale=='log' else q50+(xlim[1]-xlim[0])*0.025
-            ax.text(text_x,y_pos,label_format.format(q50),va='center',fontsize=7,color=colors_d[name])
+            ax.text(text_x,y_pos,label_format.format(q50),va='center',fontsize=6.8,color=colors_d[name])
         if xscale: ax.set_xscale(xscale)
         if xlim: ax.set_xlim(*xlim)
         if xticks:
-            ax.set_xticks(xticks); ax.set_xticklabels([str(x) for x in xticks],fontsize=7)
-        ax.set_yticks(y_positions); ax.set_yticklabels(labels,fontsize=7); ax.set_ylim(-0.7,len(order)-0.3)
-        ax.set_xlabel(xlabel)
-        ax.set_title(title,loc='left',fontsize=11,weight='bold'); ax.grid(alpha=0.25)
-        ax.text(0.02,0.08,'line: 5-95% scenarios\ndot: median',transform=ax.transAxes,fontsize=6.8,color='0.35')
-    ax=axes[0,1]
-    plot_envelope(ax,'rss_0p1_20hz_MW','0.1-20 Hz grid fluctuation RSS (MW)','b  Scenario-grid fluctuation envelope',xscale='log',xlim=(0.5,800),xticks=[1,10,100])
-    ax=axes[1,0]
-    plot_envelope(ax,'p95_pcc_voltage_deviation_pct','p95 |PCC voltage deviation| (%)','c  Scenario-grid voltage envelope',xlim=(0,8.5),label_format='{:.2f}')
-    ax=axes[1,1]
+            ax.set_xticks(xticks); ax.set_xticklabels([str(x) for x in xticks],fontsize=6.8)
+        ax.set_yticks(y_positions); ax.set_yticklabels(labels,fontsize=6.8); ax.set_ylim(-0.7,len(order)-0.3)
+        ax.set_xlabel(xlabel,fontsize=7.2); ax.tick_params(axis='x',labelsize=6.8); ax.grid(alpha=0.25)
+    ax_robust.set_axis_off()
+    ax_robust.text(0.00,1.03,'b  Scenario-grid robustness',transform=ax_robust.transAxes,ha='left',va='bottom',fontsize=11,weight='bold')
+    ax_robust.text(0.03,0.91,'line: 5-95% scenarios, dot: median',transform=ax_robust.transAxes,fontsize=6.8,color='0.35')
+    ax_rss=ax_robust.inset_axes([0.08,0.55,0.90,0.31])
+    plot_envelope(ax_rss,'rss_0p1_20hz_MW','0.1-20 Hz RSS (MW)',xscale='log',xlim=(0.5,800),xticks=[1,10,100])
+    ax_v=ax_robust.inset_axes([0.08,0.11,0.90,0.31])
+    plot_envelope(ax_v,'p95_pcc_voltage_deviation_pct','p95 PCC voltage deviation (%)',xlim=(0,8.5),label_format='{:.2f}')
+    ax=ax_buffer
     ax.plot(t[win],P_buffer[win],color='#e6550d',lw=1.4)
     ax.fill_between(t[win],0,P_buffer[win],where=P_buffer[win]>=0,color='#e6550d',alpha=0.16,interpolate=True)
     ax.fill_between(t[win],0,P_buffer[win],where=P_buffer[win]<0,color='#e6550d',alpha=0.08,interpolate=True)
     ax.axhline(0,color='0.3',lw=0.7)
-    ax.text(0.02,0.92,f'deliver {P_buffer.max():.0f} MW\nabsorb {-P_buffer.min():.0f} MW\nenergy window {E_window:.2f} MWh',transform=ax.transAxes,ha='left',va='top',fontsize=7,bbox=dict(facecolor='white',edgecolor='0.85',pad=2))
-    ax.set_xlabel('Time (s)'); ax.set_ylabel('Shared DC buffer power (MW)'); ax.set_title('d  Shared DC buffer requirement',loc='left',fontsize=11,weight='bold'); ax.grid(alpha=0.25)
-    fig.tight_layout(); savefig(fig,'fig4_voltage_stabilization_averaged_emt_v3')
+    ax.text(0.99,1.03,f'deliver {P_buffer.max():.0f} MW | absorb {-P_buffer.min():.0f} MW | energy window {E_window:.2f} MWh',transform=ax.transAxes,ha='right',va='bottom',fontsize=8,color='#e6550d',clip_on=False)
+    ax.set_xlabel('Time (s)'); ax.set_ylabel('Shared DC buffer power (MW)'); ax.set_title('c  Shared DC buffer requirement',loc='left',fontsize=11,weight='bold'); ax.margins(y=0.08); ax.grid(alpha=0.25)
+    savefig(fig,'fig4_voltage_stabilization_averaged_emt_v3')
 figure4()
 
 # Figure 5
@@ -947,7 +953,7 @@ We quantify this ownership change with an OpenDSS-ready network and a reproduced
 For the central assumptions, the 95th-percentile PCC voltage THD is 3.95% for traditional AC, 1.55% for local SSTs and 0.78% for the DC backbone (Fig. 3b). Adding active filtering or storage to the traditional AC case improves the metric, and coordinated control improves the local-SST case, but neither changes the number of AC-facing interfaces. These values are screening metrics, not a substitute for project-specific IEEE 519 compliance studies [8]. Their purpose is narrower and architectural: moving DC upstream changes a distributed compliance problem into a single utility-owned terminal design problem."""),
 ("The DC backbone buffers synchronized AI-load voltage dynamics", """The third benefit is voltage stabilization under synchronized AI training loads. We construct a synthetic but literature-parameterized 1 GW AI training waveform with repeated compute phases, communication dips and checkpointing events. The traditional AC case passes this waveform directly to the grid. The local-SST case applies limited smoothing. Stronger baselines add substation storage or coordinated SST controls. The DC-backbone case uses a slower grid-facing power command and assigns the difference between the AI load and the grid command to a shared DC buffer.
 
-Across a 3,072-case dynamic robustness grid spanning campus count, cluster load, voltage class, short-circuit ratio, phase coherence and corridor length, the median 0.1-20 Hz grid-side root-sum-square spectral magnitude is 126 MW for traditional AC, 74 MW for local SSTs and 8.3 MW for the DC backbone (Fig. 4b). The median 95th-percentile PCC voltage deviation is 2.03%, 1.29% and 0.35%, respectively (Fig. 4c). In the 1 GW reference waveform, the shared buffer must absorb up to 317 MW, deliver up to 102 MW and span an energy window of 0.42 MWh (Fig. 4d). This is a high-power, low-energy requirement. It should not be interpreted as a single large battery; rather, the DC backbone creates the electrical layer where GPU power smoothing, rack or row storage, supercapacitors, station storage and grid-facing converter control can be coordinated.
+Across a 3,072-case dynamic robustness grid spanning campus count, cluster load, voltage class, short-circuit ratio, phase coherence and corridor length, the median 0.1-20 Hz grid-side root-sum-square spectral magnitude is 126 MW for traditional AC, 74 MW for local SSTs and 8.3 MW for the DC backbone. The median 95th-percentile PCC voltage deviation is 2.03%, 1.29% and 0.35%, respectively; both scenario-grid metrics are summarized in Fig. 4b. In the 1 GW reference waveform, the shared buffer must absorb up to 317 MW, deliver up to 102 MW and span an energy window of 0.42 MWh (Fig. 4c). This is a high-power, low-energy requirement. It should not be interpreted as a single large battery; rather, the DC backbone creates the electrical layer where GPU power smoothing, rack or row storage, supercapacitors, station storage and grid-facing converter control can be coordinated.
 
 The voltage metrics in Fig. 4 are averaged EMT proxies. They are designed to compare architecture-level exposure, not to replace detailed EMT studies. We therefore include state equations, transfer-function validation and time-step convergence in the Supplementary Information. The result is that the DC backbone is not only an energy-delivery architecture; it is a dynamic electrical buffer between synchronized GPU computation and the AC grid."""),
 ("Data-center load pockets are becoming planning objects", """The proposed architecture is motivated by load pockets that are large, concentrated and data-center driven. Public planning documents for the San Jose area show a load pocket growing from approximately 2.1 GW in an earlier study case to 3.4 GW in a later base case and 4.2 GW in a sensitivity case (Fig. 5a) [9-12]. This paper does not claim that a specific planned HVDC project is a 138 kV DC AI-factory backbone. The point is that data-center-driven load pockets are already large enough to motivate controllable transmission solutions.
@@ -973,7 +979,7 @@ figure_legends = {
 'Fig. 1 | Three power-delivery architectures for AI factories.':'Orange lines denote AC sections and blue lines denote DC sections. a, Traditional AC delivery keeps AC in the subtransmission and facility distribution system before conversion to the 800 VDC data-center boundary. b, Local SST delivery uses the same AC corridor but converts at each AI campus, with AC input and DC output shown explicitly. c, The proposed architecture moves the AC/DC boundary upstream and feeds multiple campuses from a utility-operated subtransmission DC backbone, with DC/DC conversion to 34.5 kV DC and then to 800 VDC.',
 'Fig. 2 | Efficiency, uncertainty and design space.':'a, Central 1 GW, 20 km reference-case corridor and conversion losses with end-to-end efficiencies to the 800 VDC boundary; bar colours denote loss components, not AC/DC sections. b, Monte Carlo uncertainty at the reference point. c, Load-distance sweep showing where the DC-backbone loss advantage over traditional AC exceeds 10, 50 and 100 MW. d, One-at-a-time sensitivity of the central saving. A 99.0% local-SST efficiency sensitivity case is reported in the text and Supplementary Table 1.',
 'Fig. 3 | Harmonic ownership and OpenDSS-ready screening.':'a, Harmonic ownership boundary for distributed AC-facing converter cases versus the proposed single utility AC/DC terminal. b, Monte Carlo PCC voltage THD for the three architectures and two stronger baselines, with a 5% planning guide shown for context. c, 95th-percentile individual harmonic voltage distortion. d, Direct OpenDSS harmonic solve compared with the internal nodal-frequency solver.',
-'Fig. 4 | Voltage stabilization of synchronized AI training loads.':'a, Grid-side power seen by the utility for the 1 GW reference waveform. b, Scenario-grid envelope of 0.1-20 Hz grid-side root-sum-square spectral magnitude across the 3,072-case dynamic robustness grid; line segments show 5th-95th percentiles and dots show medians. c, Scenario-grid envelope of 95th-percentile absolute PCC-voltage deviation across the same grid. d, Shared DC-buffer power and energy window required for the reference waveform.',
+'Fig. 4 | Voltage stabilization of synchronized AI training loads.':'a, Grid-side power seen by the utility for the 1 GW reference waveform. b, Compact scenario-grid robustness summary across the 3,072-case dynamic robustness grid; the upper inset shows 0.1-20 Hz grid-side root-sum-square spectral magnitude and the lower inset shows 95th-percentile absolute PCC-voltage deviation, with line segments denoting 5th-95th percentiles and dots denoting medians. c, Shared DC-buffer power and energy window required for the reference waveform.',
 'Fig. 5 | Data-center load pockets and voltage-class envelope.':'a, CAISO San Jose area planning data showing a public multi-GW load-pocket precedent. b, Single-bipole current as a function of cluster load for candidate DC voltage classes; the 1 GW reference point and 3.4-4.2 GW public planning precedent show why voltage class, circuit count or both must scale with load.'}
 
 data_availability = """All inputs and outputs used to generate Figs. 2-5 and Supplementary Figs. S1-S4 are included in the accompanying reproducibility package as CSV files. Public external data are cited in the References. No restricted operational data are used. Before journal submission, this package should be deposited in Zenodo and this statement should be updated with the final DOI."""

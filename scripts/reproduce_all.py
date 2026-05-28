@@ -42,7 +42,10 @@ COLORS = {
 
 def savefig(fig, name):
     for ext in ("png", "svg"):
-        fig.savefig(OUT / f"{name}.{ext}", dpi=300, bbox_inches="tight")
+        path = OUT / f"{name}.{ext}"
+        fig.savefig(path, dpi=300, bbox_inches="tight")
+        if ext == "svg":
+            path.write_text("\n".join(line.rstrip() for line in path.read_text().splitlines()) + "\n")
     plt.close(fig)
 
 
@@ -177,9 +180,24 @@ def figure4():
         mag = np.abs(np.fft.rfft(y)) / len(y) * 2
         return freqs, mag
 
-    fig, axes = plt.subplots(2, 2, figsize=(11, 7.8))
+    fig = plt.figure(figsize=(11, 7.25))
+    gs = fig.add_gridspec(
+        2,
+        2,
+        width_ratios=[1.28, 1.0],
+        height_ratios=[1.0, 1.05],
+        left=0.07,
+        right=0.98,
+        bottom=0.08,
+        top=0.95,
+        hspace=0.50,
+        wspace=0.34,
+    )
+    ax_power = fig.add_subplot(gs[0, 0])
+    ax_robust = fig.add_subplot(gs[0, 1])
+    ax_buffer = fig.add_subplot(gs[1, :])
 
-    ax = axes[0, 0]
+    ax = ax_power
     power_series = [
         ("Traditional AC", dyn.grid_traditional_MW.to_numpy(), 1.0),
         ("Local SST", dyn.grid_local_sst_MW.to_numpy(), 1.25),
@@ -200,68 +218,68 @@ def figure4():
         "Subtransmission DC backbone",
     ]
 
-    def plot_envelope(ax, column, xlabel, title, xscale=None, xlim=None, xticks=None, label_format="{:.1f}"):
+    def plot_envelope(ax, column, xlabel, xscale=None, xlim=None, xticks=None, label_format="{:.1f}"):
         y_positions = np.arange(len(order))[::-1]
-        labels = ["Traditional AC", "Local SST", "DC backbone"]
+        labels = ["Trad. AC", "Local SST", "DC backbone"]
         for y_pos, name in zip(y_positions, order):
             values = robustness.loc[robustness.architecture == name, column].to_numpy()
             q05, q50, q95 = np.quantile(values, [0.05, 0.50, 0.95])
-            ax.hlines(y_pos, q05, q95, color=COLORS[name], lw=5.5, alpha=0.38)
-            ax.plot(q50, y_pos, marker="o", ms=6.5, color=COLORS[name], markeredgecolor="white", markeredgewidth=0.7)
+            ax.hlines(y_pos, q05, q95, color=COLORS[name], lw=5.0, alpha=0.38)
+            ax.plot(q50, y_pos, marker="o", ms=5.8, color=COLORS[name], markeredgecolor="white", markeredgewidth=0.7)
             text_x = q50 * 1.08 if xscale == "log" else q50 + (xlim[1] - xlim[0]) * 0.025
-            ax.text(text_x, y_pos, label_format.format(q50), va="center", fontsize=7, color=COLORS[name])
+            ax.text(text_x, y_pos, label_format.format(q50), va="center", fontsize=6.8, color=COLORS[name])
         if xscale:
             ax.set_xscale(xscale)
         if xlim:
             ax.set_xlim(*xlim)
         if xticks:
             ax.set_xticks(xticks)
-            ax.set_xticklabels([str(x) for x in xticks], fontsize=7)
+            ax.set_xticklabels([str(x) for x in xticks], fontsize=6.8)
         ax.set_yticks(y_positions)
-        ax.set_yticklabels(labels, fontsize=7)
+        ax.set_yticklabels(labels, fontsize=6.8)
         ax.set_ylim(-0.7, len(order) - 0.3)
-        ax.set_xlabel(xlabel)
-        ax.set_title(title, loc="left", fontsize=11, weight="bold")
+        ax.set_xlabel(xlabel, fontsize=7.2)
+        ax.tick_params(axis="x", labelsize=6.8)
         ax.grid(alpha=0.25)
-        ax.text(0.02, 0.08, "line: 5-95% scenarios\ndot: median", transform=ax.transAxes, fontsize=6.8, color="0.35")
 
-    ax = axes[0, 1]
+    ax_robust.set_axis_off()
+    ax_robust.text(0.00, 1.03, "b  Scenario-grid robustness", transform=ax_robust.transAxes,
+                   ha="left", va="bottom", fontsize=11, weight="bold")
+    ax_robust.text(0.03, 0.91, "line: 5-95% scenarios, dot: median", transform=ax_robust.transAxes,
+                   fontsize=6.8, color="0.35")
+    ax_rss = ax_robust.inset_axes([0.08, 0.55, 0.90, 0.31])
     plot_envelope(
-        ax,
+        ax_rss,
         "rss_0p1_20hz_MW",
-        "0.1-20 Hz grid fluctuation RSS (MW)",
-        "b  Scenario-grid fluctuation envelope",
+        "0.1-20 Hz RSS (MW)",
         xscale="log",
         xlim=(0.5, 800),
         xticks=[1, 10, 100],
     )
-
-    ax = axes[1, 0]
+    ax_v = ax_robust.inset_axes([0.08, 0.11, 0.90, 0.31])
     plot_envelope(
-        ax,
+        ax_v,
         "p95_pcc_voltage_deviation_pct",
-        "p95 |PCC voltage deviation| (%)",
-        "c  Scenario-grid voltage envelope",
+        "p95 PCC voltage deviation (%)",
         xlim=(0, 8.5),
         label_format="{:.2f}",
     )
 
-    ax = axes[1, 1]
+    ax = ax_buffer
     buffer_power = dyn.dc_buffer_power_MW.to_numpy()
     ax.plot(t[win], buffer_power[win], color="#e6550d", lw=1.4)
     ax.fill_between(t[win], 0, buffer_power[win], where=buffer_power[win] >= 0, color="#e6550d", alpha=0.16, interpolate=True)
     ax.fill_between(t[win], 0, buffer_power[win], where=buffer_power[win] < 0, color="#e6550d", alpha=0.08, interpolate=True)
     ax.axhline(0, color="0.3", lw=0.7)
     buffer_metrics = metrics.loc["DC buffer"]
-    ax.text(0.02, 0.92, f"deliver {buffer_metrics.max_discharge_MW:.0f} MW\nabsorb {buffer_metrics.max_charge_MW:.0f} MW\nenergy window {buffer_metrics.energy_window_MWh:.2f} MWh",
-            transform=ax.transAxes, ha="left", va="top", fontsize=7,
-            bbox=dict(facecolor="white", edgecolor="0.85", pad=2))
+    ax.text(0.99, 1.03, f"deliver {buffer_metrics.max_discharge_MW:.0f} MW | absorb {buffer_metrics.max_charge_MW:.0f} MW | energy window {buffer_metrics.energy_window_MWh:.2f} MWh",
+            transform=ax.transAxes, ha="right", va="bottom", fontsize=8, color="#e6550d", clip_on=False)
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Shared DC buffer power (MW)")
-    ax.set_title("d  Shared DC buffer requirement", loc="left", fontsize=11, weight="bold")
+    ax.set_title("c  Shared DC buffer requirement", loc="left", fontsize=11, weight="bold")
+    ax.margins(y=0.08)
     ax.grid(alpha=0.25)
 
-    fig.tight_layout()
     savefig(fig, "fig4_voltage_stabilization_averaged_emt_v3")
 
 
