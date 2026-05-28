@@ -248,7 +248,7 @@ def figure4():
     buffer_power = dyn.dc_buffer_power_MW.to_numpy()
     ax.plot(t[win], buffer_power[win], color="#e6550d", lw=1.4)
     ax.fill_between(t[win], 0, buffer_power[win], where=buffer_power[win] >= 0, color="#e6550d", alpha=0.16, interpolate=True)
-    ax.fill_between(t[win], 0, buffer_power[win], where=buffer_power[win] < 0, color="#756bb1", alpha=0.14, interpolate=True)
+    ax.fill_between(t[win], 0, buffer_power[win], where=buffer_power[win] < 0, color="#e6550d", alpha=0.08, interpolate=True)
     ax.axhline(0, color="0.3", lw=0.7)
     buffer_metrics = metrics.loc["DC buffer"]
     ax.text(0.02, 0.92, f"deliver {buffer_metrics.max_discharge_MW:.0f} MW\nabsorb {buffer_metrics.max_charge_MW:.0f} MW\nenergy window {buffer_metrics.energy_window_MWh:.2f} MWh",

@@ -699,7 +699,7 @@ def figure4():
     ax=axes[1,1]
     ax.plot(t[win],P_buffer[win],color='#e6550d',lw=1.4)
     ax.fill_between(t[win],0,P_buffer[win],where=P_buffer[win]>=0,color='#e6550d',alpha=0.16,interpolate=True)
-    ax.fill_between(t[win],0,P_buffer[win],where=P_buffer[win]<0,color='#756bb1',alpha=0.14,interpolate=True)
+    ax.fill_between(t[win],0,P_buffer[win],where=P_buffer[win]<0,color='#e6550d',alpha=0.08,interpolate=True)
     ax.axhline(0,color='0.3',lw=0.7)
     ax.text(0.02,0.92,f'deliver {P_buffer.max():.0f} MW\nabsorb {-P_buffer.min():.0f} MW\nenergy window {E_window:.2f} MWh',transform=ax.transAxes,ha='left',va='top',fontsize=7,bbox=dict(facecolor='white',edgecolor='0.85',pad=2))
     ax.set_xlabel('Time (s)'); ax.set_ylabel('Shared DC buffer power (MW)'); ax.set_title('d  Shared DC buffer requirement',loc='left',fontsize=11,weight='bold'); ax.grid(alpha=0.25)
