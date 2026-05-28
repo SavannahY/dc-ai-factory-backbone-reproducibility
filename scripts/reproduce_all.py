@@ -180,22 +180,20 @@ def figure4():
         mag = np.abs(np.fft.rfft(y)) / len(y) * 2
         return freqs, mag
 
-    fig = plt.figure(figsize=(11, 7.25))
+    fig = plt.figure(figsize=(11.4, 3.7))
     gs = fig.add_gridspec(
-        2,
-        2,
-        width_ratios=[1.28, 1.0],
-        height_ratios=[1.0, 1.05],
-        left=0.07,
-        right=0.98,
-        bottom=0.08,
-        top=0.95,
-        hspace=0.50,
-        wspace=0.34,
+        1,
+        3,
+        width_ratios=[1.08, 1.12, 1.16],
+        left=0.055,
+        right=0.985,
+        bottom=0.20,
+        top=0.84,
+        wspace=0.36,
     )
-    ax_power = fig.add_subplot(gs[0, 0])
-    ax_robust = fig.add_subplot(gs[0, 1])
-    ax_buffer = fig.add_subplot(gs[1, :])
+    ax_robust = fig.add_subplot(gs[0, 0])
+    ax_power = fig.add_subplot(gs[0, 1])
+    ax_buffer = fig.add_subplot(gs[0, 2])
 
     ax = ax_power
     power_series = [
@@ -208,8 +206,9 @@ def figure4():
         ax.plot(t[win], values[win], color=COLORS[name], lw=lw, label=label)
     ax.set_ylabel("Grid-side power (MW)")
     ax.set_xlabel("Time (s)")
-    ax.set_title("a  Grid-side power seen by the utility", loc="left", fontsize=11, weight="bold")
-    ax.legend(fontsize=7, ncol=1, frameon=False, loc="lower right")
+    ax.set_title("b  Utility-facing power", loc="left", fontsize=11, weight="bold")
+    ax.legend(fontsize=6.6, ncol=1, frameon=False, loc="lower right")
+    ax.tick_params(labelsize=7)
     ax.grid(alpha=0.25)
 
     order = [
@@ -243,11 +242,11 @@ def figure4():
         ax.grid(alpha=0.25)
 
     ax_robust.set_axis_off()
-    ax_robust.text(0.00, 1.03, "b  Scenario-grid robustness", transform=ax_robust.transAxes,
+    ax_robust.text(0.00, 1.03, "a  Scenario-grid robustness", transform=ax_robust.transAxes,
                    ha="left", va="bottom", fontsize=11, weight="bold")
-    ax_robust.text(0.03, 0.91, "line: 5-95% scenarios, dot: median", transform=ax_robust.transAxes,
+    ax_robust.text(0.04, 0.91, "line: 5-95% scenarios, dot: median", transform=ax_robust.transAxes,
                    fontsize=6.8, color="0.35")
-    ax_rss = ax_robust.inset_axes([0.08, 0.55, 0.90, 0.31])
+    ax_rss = ax_robust.inset_axes([0.10, 0.55, 0.88, 0.31])
     plot_envelope(
         ax_rss,
         "rss_0p1_20hz_MW",
@@ -256,7 +255,7 @@ def figure4():
         xlim=(0.5, 800),
         xticks=[1, 10, 100],
     )
-    ax_v = ax_robust.inset_axes([0.08, 0.11, 0.90, 0.31])
+    ax_v = ax_robust.inset_axes([0.10, 0.11, 0.88, 0.31])
     plot_envelope(
         ax_v,
         "p95_pcc_voltage_deviation_pct",
@@ -271,12 +270,10 @@ def figure4():
     ax.fill_between(t[win], 0, buffer_power[win], where=buffer_power[win] >= 0, color="#e6550d", alpha=0.16, interpolate=True)
     ax.fill_between(t[win], 0, buffer_power[win], where=buffer_power[win] < 0, color="#e6550d", alpha=0.08, interpolate=True)
     ax.axhline(0, color="0.3", lw=0.7)
-    buffer_metrics = metrics.loc["DC buffer"]
-    ax.text(0.99, 1.03, f"deliver {buffer_metrics.max_discharge_MW:.0f} MW | absorb {buffer_metrics.max_charge_MW:.0f} MW | energy window {buffer_metrics.energy_window_MWh:.2f} MWh",
-            transform=ax.transAxes, ha="right", va="bottom", fontsize=8, color="#e6550d", clip_on=False)
     ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Shared DC buffer power (MW)")
-    ax.set_title("c  Shared DC buffer requirement", loc="left", fontsize=11, weight="bold")
+    ax.set_ylabel("Buffer power (MW)")
+    ax.set_title("c  Shared DC buffer", loc="left", fontsize=11, weight="bold")
+    ax.tick_params(labelsize=7)
     ax.margins(y=0.08)
     ax.grid(alpha=0.25)
 
