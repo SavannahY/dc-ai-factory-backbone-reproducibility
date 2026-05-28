@@ -509,107 +509,147 @@ def load_true_opendss_thdv():
     return None
 
 def figure1():
-    fig,ax=plt.subplots(figsize=(12.4,7.5)); ax.set_xlim(0,10); ax.set_ylim(0,7.5); ax.axis('off')
-    ac='#c44e00'; dc='#1f78b4'; grey='0.32'
+    fig,ax=plt.subplots(figsize=(12.8,7.25)); ax.set_xlim(0,12.2); ax.set_ylim(0,7.25); ax.axis('off')
+    ac='#c44e00'; dc='#1f78b4'; grey='0.34'; light='#f4f4f4'
 
-    def cable(xs, ys, color, lw=2.6):
-        ax.plot(xs, ys, color=color, lw=lw, solid_capstyle='round', zorder=1)
+    def line(x0,y0,x1,y1,color,lw=2.2,z=1):
+        ax.plot([x0,x1],[y0,y1],color=color,lw=lw,solid_capstyle='round',zorder=z)
 
-    def busbar(x, y0, y1, color):
-        ax.plot([x,x],[y0,y1],color=color,lw=3.0,solid_capstyle='round',zorder=1)
+    def node(x,y,color):
+        ax.add_patch(Circle((x,y),0.045,facecolor=color,edgecolor=color,lw=0.7,zorder=5))
 
-    def split_box(x, y, label, left_color, right_color, w=0.66, h=0.42, fs=7.2):
-        ax.add_patch(Rectangle((x-w/2,y-h/2),w/2,h,facecolor=left_color,edgecolor='none',alpha=0.18,zorder=2))
-        ax.add_patch(Rectangle((x,y-h/2),w/2,h,facecolor=right_color,edgecolor='none',alpha=0.18,zorder=2))
-        ax.add_patch(FancyBboxPatch((x-w/2,y-h/2),w,h,boxstyle='round,pad=0.02,rounding_size=0.035',facecolor='none',edgecolor=grey,lw=1.1,zorder=3))
-        ax.plot([x,x],[y-h/2,y+h/2],color='0.7',lw=0.7,zorder=3)
-        ax.text(x,y,label,ha='center',va='center',fontsize=fs,weight='bold',zorder=4)
+    def breaker(x,y,color,orient='h',s=0.11):
+        if orient=='h':
+            ax.add_patch(Rectangle((x-s/2,y-s/2),s,s,facecolor='white',edgecolor=grey,lw=0.9,zorder=5))
+            line(x-s*1.25,y,x-s/2,y,color,lw=1.5,z=4); line(x+s/2,y,x+s*1.25,y,color,lw=1.5,z=4)
+        else:
+            ax.add_patch(Rectangle((x-s/2,y-s/2),s,s,facecolor='white',edgecolor=grey,lw=0.9,zorder=5))
+            line(x,y-s*1.25,x,y-s/2,color,lw=1.5,z=4); line(x,y+s/2,x,y+s*1.25,color,lw=1.5,z=4)
 
-    def plain_box(x, y, label, w=0.58, h=0.36, fs=7.0):
-        ax.add_patch(FancyBboxPatch((x-w/2,y-h/2),w,h,boxstyle='round,pad=0.02,rounding_size=0.035',facecolor='white',edgecolor=grey,lw=1.1,zorder=3))
-        ax.text(x,y,label,ha='center',va='center',fontsize=fs,weight='bold',zorder=4)
+    def station(x,y,w,h,label):
+        ax.add_patch(FancyBboxPatch((x-w/2,y-h/2),w,h,boxstyle='round,pad=0.03,rounding_size=0.04',
+                                    facecolor=light,edgecolor='0.45',lw=1.0,zorder=0))
+        if label:
+            ax.text(x,y+h/2+0.10,label,ha='center',va='bottom',fontsize=6.8,color='0.25')
 
-    def campus(x, y):
-        draw_icon(ax,x,y,'campus',0.56)
+    def substation(x,y,label='utility substation'):
+        station(x,y,1.25,0.62,label)
+        line(x-0.43,y+0.16,x+0.43,y+0.16,grey,lw=1.1,z=2)
+        line(x-0.43,y-0.13,x+0.43,y-0.13,grey,lw=1.1,z=2)
+        for bx in [x-0.28,x+0.02,x+0.32]:
+            breaker(bx,y+0.02,grey,orient='v',s=0.09)
+        transformer(x-0.50,y-0.01,0.12)
 
-    def row_header(y, lab, title):
-        ax.text(0.18,y+0.58,lab,fontsize=14,weight='bold')
-        ax.text(0.48,y+0.58,title,fontsize=13,weight='bold')
+    def transformer(x,y,r=0.12):
+        ax.add_patch(Circle((x-r*0.45,y),r,facecolor='white',edgecolor=grey,lw=0.9,zorder=4))
+        ax.add_patch(Circle((x+r*0.45,y),r,facecolor='white',edgecolor=grey,lw=0.9,zorder=4))
 
-    def boundary(x, y, text):
-        ax.plot([x,x],[y-0.68,y+0.68],color='0.2',lw=1.0,ls='--',zorder=0)
-        ax.text(x,y+0.79,text,ha='center',fontsize=7,color='0.2')
+    def split_box(x,y,label,w=0.72,h=0.44,fs=7.0):
+        ax.add_patch(Rectangle((x-w/2,y-h/2),w/2,h,facecolor=ac,edgecolor='none',alpha=0.16,zorder=3))
+        ax.add_patch(Rectangle((x,y-h/2),w/2,h,facecolor=dc,edgecolor='none',alpha=0.16,zorder=3))
+        ax.add_patch(FancyBboxPatch((x-w/2,y-h/2),w,h,boxstyle='round,pad=0.02,rounding_size=0.04',
+                                    facecolor='none',edgecolor=grey,lw=1.2,zorder=4))
+        ax.plot([x,x],[y-h/2,y+h/2],color='0.65',lw=0.8,ls='--',zorder=4)
+        ax.text(x,y,label,ha='center',va='center',fontsize=fs,weight='bold',zorder=5)
 
-    branch_offsets=[0.48,0,-0.48]
-    ybands=[6.25,3.9,1.55]
+    def plain_box(x,y,label,w=0.70,h=0.40,fs=7.0):
+        ax.add_patch(FancyBboxPatch((x-w/2,y-h/2),w,h,boxstyle='round,pad=0.02,rounding_size=0.04',
+                                    facecolor='white',edgecolor=grey,lw=1.2,zorder=4))
+        ax.text(x,y,label,ha='center',va='center',fontsize=fs,weight='bold',zorder=5)
 
-    # a, Traditional AC delivery
-    y=ybands[0]; row_header(y,'a','Traditional AC')
-    draw_icon(ax,0.85,y,'grid',0.72); draw_icon(ax,1.75,y,'substation',0.70)
-    cable([1.07,1.50],[y,y],ac); cable([2.00,4.15],[y,y],ac)
-    for x in [2.65,3.15,3.65]: draw_icon(ax,x,y,'tower',0.72)
-    busbar(4.20,y-0.54,y+0.54,ac)
-    ax.text(3.10,y-0.43,'138 kV AC corridor',ha='center',fontsize=7.6,color=ac)
+    def data_hall(x,y):
+        ax.add_patch(Rectangle((x-0.35,y-0.15),0.70,0.30,facecolor='#e9eef2',edgecolor='0.25',lw=1.0,zorder=4))
+        for dx in [-0.18,0,0.18]:
+            ax.add_patch(Rectangle((x+dx-0.035,y-0.15),0.07,0.30,facecolor='#c1cdd6',edgecolor='none',zorder=5))
+        ax.add_patch(Rectangle((x-0.28,y+0.15),0.16,0.05,facecolor='#d5d5d5',edgecolor='0.5',lw=0.4,zorder=5))
+        ax.add_patch(Rectangle((x+0.12,y+0.15),0.16,0.05,facecolor='#d5d5d5',edgecolor='0.5',lw=0.4,zorder=5))
+
+    def row_header(y,letter,title):
+        ax.text(0.20,y+0.58,letter,fontsize=14,weight='bold',ha='left',va='center')
+        ax.text(0.55,y+0.58,title,fontsize=13,weight='bold',ha='left',va='center')
+
+    def boundary(x,y,text):
+        ax.plot([x,x],[y-0.66,y+0.66],color='0.25',lw=0.9,ls='--',zorder=0)
+        ax.text(x,y+0.78,text,ha='center',va='bottom',fontsize=6.8,color='0.25')
+
+    def supply_front_end(y):
+        draw_icon(ax,0.88,y,'grid',0.58)
+        line(1.12,y,1.50,y,ac,lw=2.1)
+        substation(2.05,y,'230/138 kV utility substation')
+        line(2.68,y,3.15,y,ac,lw=2.1)
+
+    def ac_corridor(y,x0=3.15,x1=5.15):
+        line(x0,y,x1,y,ac,lw=2.1)
+        for tx in [3.65,4.20,4.75]:
+            draw_icon(ax,tx,y,'tower',0.60)
+        ax.text((x0+x1)/2,y-0.42,'138 kV AC corridor',ha='center',fontsize=7.2,color=ac)
+
+    def dc_corridor(y,x0=3.45,x1=5.20):
+        line(x0,y+0.07,x1,y+0.07,dc,lw=1.8)
+        line(x0,y-0.07,x1,y-0.07,dc,lw=1.8)
+        for tx in [3.86,4.32,4.78]:
+            draw_icon(ax,tx,y,'tower',0.58)
+        ax.text((x0+x1)/2,y-0.44,'+/-138 kV DC corridor',ha='center',fontsize=7.2,color=dc)
+
+    branch_offsets=[0.45,0,-0.45]
+    rows=[6.05,3.75,1.45]
+
+    # a, Traditional AC
+    y=rows[0]; row_header(y,'a','Traditional AC delivery')
+    supply_front_end(y); ac_corridor(y)
+    line(5.25,y-0.58,5.25,y+0.58,ac,lw=2.8)
+    ax.text(5.25,y+0.80,'three AC feeder bays',ha='center',fontsize=6.8,color='0.25')
     for dy in branch_offsets:
         cy=y+dy
-        cable([4.20,5.76],[cy,cy],ac)
-        draw_icon(ax,5.92,cy,'substation',0.45)
-        cable([6.08,6.91],[cy,cy],ac)
-        split_box(7.20,cy,'AC/DC',ac,dc,w=0.58,h=0.34,fs=6.6)
-        cable([7.49,8.36],[cy,cy],dc)
-        campus(8.56,cy)
-        ax.text(9.14,cy,'800 VDC',va='center',fontsize=7,color=dc)
-    boundary(7.20,y,'AC/DC boundary\nat campuses')
-    ax.text(5.12,y+0.76,'3 AC-facing\ninterfaces',ha='center',fontsize=7,color='0.2')
-    ax.text(5.96,y-0.72,'facility AC switchgear',ha='center',fontsize=7.4,color=ac)
-    ax.text(8.56,y-0.72,'AI campuses',ha='center',fontsize=7.4,color='0.25')
+        breaker(5.38,cy,ac); line(5.48,cy,6.16,cy,ac,lw=2.0)
+        substation(6.76,cy,'')
+        line(7.38,cy,7.82,cy,ac,lw=2.0)
+        split_box(8.16,cy,'AC/DC',w=0.66,h=0.34,fs=6.5)
+        line(8.49,cy,9.42,cy,dc,lw=2.0)
+        data_hall(9.68,cy); ax.text(10.20,cy,'800 VDC',va='center',fontsize=6.8,color=dc)
+    boundary(8.16,y,'AC/DC boundary\nat campuses')
+    ax.text(6.76,y+0.84,'campus AC switchyards',ha='center',fontsize=6.8,color='0.25')
+    ax.text(8.16,y-0.83,'3 campus AC/DC interfaces',ha='center',fontsize=6.8,color='0.25')
 
-    # b, Local SST delivery
-    y=ybands[1]; row_header(y,'b','Local SST')
-    draw_icon(ax,0.85,y,'grid',0.72); draw_icon(ax,1.75,y,'substation',0.70)
-    cable([1.07,1.50],[y,y],ac); cable([2.00,4.15],[y,y],ac)
-    for x in [2.65,3.15,3.65]: draw_icon(ax,x,y,'tower',0.72)
-    busbar(4.20,y-0.54,y+0.54,ac)
-    ax.text(3.10,y-0.43,'138 kV AC corridor',ha='center',fontsize=7.6,color=ac)
+    # b, Local SST
+    y=rows[1]; row_header(y,'b','Local SST delivery')
+    supply_front_end(y); ac_corridor(y)
+    line(5.25,y-0.58,5.25,y+0.58,ac,lw=2.8)
     for dy in branch_offsets:
         cy=y+dy
-        cable([4.20,5.86],[cy,cy],ac)
-        split_box(6.16,cy,'SST',ac,dc,w=0.60,h=0.38,fs=7.0)
-        cable([6.46,8.36],[cy,cy],dc)
-        campus(8.56,cy)
-        ax.text(7.20,cy+0.15,'800 VDC',ha='center',fontsize=6.8,color=dc)
-    boundary(6.16,y,'AC/DC boundary\ninside local SSTs')
-    ax.text(4.95,y+0.76,'3 AC-facing\ninterfaces',ha='center',fontsize=7,color='0.2')
-    ax.text(5.55,y-0.72,'AC input',ha='center',fontsize=7,color=ac)
-    ax.text(6.88,y-0.72,'DC output',ha='center',fontsize=7,color=dc)
-    ax.text(8.56,y-0.72,'AI campuses',ha='center',fontsize=7.4,color='0.25')
+        breaker(5.38,cy,ac); line(5.48,cy,6.34,cy,ac,lw=2.0)
+        split_box(6.76,cy,'SST',w=0.74,h=0.38,fs=6.8)
+        line(7.13,cy,9.42,cy,dc,lw=2.0)
+        data_hall(9.68,cy); ax.text(10.20,cy,'800 VDC',va='center',fontsize=6.8,color=dc)
+    boundary(6.76,y,'AC/DC boundary\ninside local SSTs')
+    ax.text(5.95,y+0.78,'AC input',ha='center',fontsize=6.8,color=ac)
+    ax.text(7.55,y+0.78,'DC output',ha='center',fontsize=6.8,color=dc)
+    ax.text(6.76,y-0.83,'3 SST AC-facing interfaces',ha='center',fontsize=6.8,color='0.25')
 
-    # c, Utility DC backbone
-    y=ybands[2]; row_header(y,'c','DC backbone')
-    draw_icon(ax,0.85,y,'grid',0.72); draw_icon(ax,1.62,y,'substation',0.58)
-    cable([1.07,1.41],[y,y],ac); cable([1.83,2.02],[y,y],ac)
-    split_box(2.38,y,'AC/DC',ac,dc,w=0.72,h=0.46,fs=7.0)
-    cable([2.75,4.82],[y,y],dc,lw=3.0)
-    for x in [3.25,3.75,4.25]: draw_icon(ax,x,y,'tower',0.72)
-    busbar(4.92,y-0.54,y+0.54,dc)
-    ax.text(3.80,y-0.43,'+/-138 kV DC backbone',ha='center',fontsize=7.6,color=dc)
+    # c, DC backbone
+    y=rows[2]; row_header(y,'c','Utility DC backbone')
+    supply_front_end(y)
+    split_box(3.35,y,'AC/DC',w=0.78,h=0.46,fs=6.8)
+    ax.plot([3.35,3.35],[y-0.66,y+0.66],color='0.25',lw=0.9,ls='--',zorder=0)
+    ax.text(3.35,y+0.97,'AC/DC boundary\nat utility terminal',ha='center',va='bottom',fontsize=6.8,color='0.25')
+    line(2.68,y,2.96,y,ac,lw=2.1); node(2.96,y,ac); node(3.74,y,dc)
+    dc_corridor(y,3.74,5.15)
+    line(5.25,y-0.58,5.25,y+0.58,dc,lw=2.8)
+    ax.text(3.35,y-0.82,'single utility AC/DC terminal',ha='center',fontsize=6.8,color='0.25')
     for dy in branch_offsets:
         cy=y+dy
-        cable([4.92,5.64],[cy,cy],dc)
-        plain_box(5.92,cy,'DC/DC',w=0.56,h=0.34,fs=6.6)
-        cable([6.20,7.15],[cy,cy],dc)
-        ax.text(6.66,cy+0.14,'34.5 kV DC',ha='center',fontsize=6.8,color=dc)
-        plain_box(7.42,cy,'DC/DC',w=0.54,h=0.34,fs=6.6)
-        cable([7.69,8.36],[cy,cy],dc)
-        campus(8.56,cy)
-        ax.text(9.14,cy,'800 VDC',va='center',fontsize=7,color=dc)
-    boundary(2.38,y,'AC/DC boundary\nat utility terminal')
-    ax.text(3.06,y+0.76,'1 AC-facing\ninterface',ha='center',fontsize=7,color='0.2')
-    ax.text(5.92,y-0.72,'campus DC station',ha='center',fontsize=7,color='0.25')
-    ax.text(8.56,y-0.72,'AI campuses',ha='center',fontsize=7.4,color='0.25')
+        breaker(5.38,cy,dc); line(5.48,cy,6.05,cy,dc,lw=2.0)
+        plain_box(6.40,cy,'DC/DC',w=0.66,h=0.34,fs=6.4)
+        line(6.73,cy,7.55,cy,dc,lw=2.0)
+        ax.text(7.10,cy+0.16,'34.5 kV DC',ha='center',fontsize=6.4,color=dc)
+        plain_box(7.92,cy,'DC/DC',w=0.66,h=0.34,fs=6.4)
+        line(8.25,cy,9.42,cy,dc,lw=2.0)
+        data_hall(9.68,cy); ax.text(10.20,cy,'800 VDC',va='center',fontsize=6.8,color=dc)
+    ax.text(6.40,y-0.77,'campus DC station',ha='center',fontsize=7.0,color='0.25')
+    ax.text(9.68,y-0.77,'AI data halls',ha='center',fontsize=7.0,color='0.25')
 
-    ax.plot([0.35,0.70],[0.35,0.35],color=ac,lw=3.0); ax.text(0.76,0.35,'AC',va='center',fontsize=8,color=ac)
-    ax.plot([1.08,1.43],[0.35,0.35],color=dc,lw=3.0); ax.text(1.49,0.35,'DC',va='center',fontsize=8,color=dc)
+    ax.plot([0.35,0.68],[0.25,0.25],color=ac,lw=3.0); ax.text(0.75,0.25,'AC',va='center',fontsize=8,color=ac)
+    ax.plot([1.10,1.43],[0.25,0.25],color=dc,lw=3.0); ax.text(1.50,0.25,'DC',va='center',fontsize=8,color=dc)
     fig.tight_layout(); savefig(fig,'fig1_architecture_formal_v3')
 figure1()
 
@@ -975,7 +1015,7 @@ methods = [
 ("Protection-zone screening", """Representative protection dynamics are simulated for a backbone pole-to-ground fault and a campus DC/DC internal fault. The model includes detection, converter current limiting, breaker opening, section isolation and healthy-campus re-energization. It is intended to check plausibility and expose the required protection functions; it is not a validated DC-breaker or insulation-coordination design.""")]
 
 figure_legends = {
-'Fig. 1 | Three power-delivery architectures for AI factories.':'Orange lines denote AC sections and blue lines denote DC sections. a, Traditional AC delivery keeps AC in the subtransmission and facility distribution system before conversion to the 800 VDC data-center boundary. b, Local SST delivery uses the same AC corridor but converts at each AI campus, with AC input and DC output shown explicitly. c, The proposed architecture moves the AC/DC boundary upstream and feeds multiple campuses from a utility-operated subtransmission DC backbone, with DC/DC conversion to 34.5 kV DC and then to 800 VDC.',
+'Fig. 1 | Three power-delivery architectures for AI factories.':'One-line-style diagrams compare the grid-facing boundary of three architectures. Orange lines denote AC sections, blue lines denote DC sections and grey boxes denote substation or campus switchyard equipment. a, Traditional AC delivery keeps AC in the subtransmission corridor and campus switchyards before conversion to the 800 VDC data-center boundary. b, Local SST delivery uses the same AC corridor but converts at each AI campus, with AC input and DC output shown explicitly. c, The proposed architecture moves the AC/DC boundary to a utility converter terminal and feeds multiple campuses from a subtransmission DC backbone, with DC/DC conversion to 34.5 kV DC and then to 800 VDC.',
 'Fig. 2 | Efficiency, uncertainty and design space.':'a, Central 1 GW, 20 km reference-case corridor and conversion losses with end-to-end efficiencies to the 800 VDC boundary; bar colours denote loss components, not AC/DC sections. b, Monte Carlo uncertainty at the reference point. c, Load-distance sweep showing where the DC-backbone loss advantage over traditional AC exceeds 10, 50 and 100 MW. d, One-at-a-time sensitivity of the central saving. A 99.0% local-SST efficiency sensitivity case is reported in the text and Supplementary Table 1.',
 'Fig. 3 | Harmonic ownership and OpenDSS-ready screening.':'a, Harmonic ownership boundary for distributed AC-facing converter cases versus the proposed single utility AC/DC terminal. b, Monte Carlo PCC voltage THD for the three architectures and two stronger baselines, with a 5% planning guide shown for context. c, 95th-percentile individual harmonic voltage distortion. d, Direct OpenDSS harmonic solve compared with the internal nodal-frequency solver.',
 'Fig. 4 | Voltage stabilization of synchronized AI training loads.':'a, Compact scenario-grid robustness summary across the 3,072-case dynamic robustness grid; the upper inset shows 0.1-20 Hz grid-side root-sum-square spectral magnitude and the lower inset shows 95th-percentile absolute PCC-voltage deviation, with line segments denoting 5th-95th percentiles and dots denoting medians. b, Grid-side power seen by the utility for the 1 GW reference waveform. c, Shared DC-buffer power and energy window required for the reference waveform.',
