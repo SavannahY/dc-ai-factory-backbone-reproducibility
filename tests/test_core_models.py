@@ -65,10 +65,10 @@ def test_spectral_energy_detects_in_band_signal() -> None:
     dt = 0.001
     t = np.arange(0, 10, dt)
     in_band = 3.0 * np.sin(2 * math.pi * 1.0 * t)
-    below_band = 7.0 * np.sin(2 * math.pi * 0.02 * t)
+    above_band = 7.0 * np.sin(2 * math.pi * 30.0 * t)
 
     assert spectral_energy(in_band, dt=dt) == pytest.approx(3.0, rel=2e-3)
-    assert spectral_energy(below_band, dt=dt) < 0.2
+    assert spectral_energy(above_band, dt=dt) == pytest.approx(0.0, abs=1e-10)
 
 
 def test_harmonic_resonance_factor_is_finite_and_peaked() -> None:
