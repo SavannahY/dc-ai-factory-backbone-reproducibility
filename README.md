@@ -1,4 +1,3 @@
-
 # Direct-current subtransmission backbones for grid-stable AI factories
 
 This repository contains the data, screening models, figures and OpenDSS-compatible files for the manuscript
@@ -8,8 +7,10 @@ This repository contains the data, screening models, figures and OpenDSS-compati
 - `data/`: CSV inputs and outputs for all manuscript and supplementary figures.
 - `figures/`: publication figures in PNG/SVG form.
 - `src/ai_dc_backbone/`: reusable Python model modules.
-- `scripts/`: reproduction helpers and optional OpenDSS runner.
+- `scripts/`: reproduction helpers, reproducibility audit, and optional OpenDSS runner.
 - `opendss/`: OpenDSS-compatible harmonic network files.
+- `tests/`: model-invariant and archived-data regression tests used by CI.
+- `docs/`: reproduction notes, figure provenance, AI disclosure language, and publication-risk review material.
 
 ## Reproducing results
 ```bash
@@ -30,6 +31,40 @@ figures were generated with transparent Python models. The broader robustness
 envelopes are archived as CSV tables under `data/` and, for harmonics, as
 Supplementary Figs. S5-S6.
 OpenDSS circuit files and the run log are included under `opendss/`.
+
+## Fast validation before submission
+```bash
+pytest -q
+python scripts/audit_reproducibility.py
+```
+
+The tests check the core model primitives, reference-case regression values,
+archived dynamic/harmonic scenario summaries, and consistency between the
+archived direct OpenDSS run log and CSV outputs. The audit script checks the DOI
+manifest hashes and the claim-level rank orderings that the manuscript depends
+on. For a release candidate, run:
+
+```bash
+python scripts/audit_reproducibility.py --strict
+```
+
+`--strict` also fails when release-like source/data files are missing from
+`MANIFEST_SHA256.csv`; regenerate the manifest after final file changes.
+
+## Publication-readiness notes
+The repository supports an architecture-level screening claim, not a final
+hardware design. Before journal submission, review:
+
+- `docs/methodological_risk_register.md` for reviewer-facing risk boundaries.
+- `docs/reproduction.md` for the complete reproduction sequence.
+- `docs/figure_provenance.md` for figure-generation provenance.
+- `docs/ai_assisted_drafting_disclosure.md` for disclosure language that must be approved by all authors.
+
+Core guardrail: the manuscript should say that the DC-backbone architecture
+centralizes AC harmonic ownership and reduces screening-level dynamic exposure
+under stated assumptions. It should not claim site-specific IEEE 519 compliance,
+validated DC protection, insulation coordination, or a completed capital-cost
+case.
 
 ## Citation
 See `CITATION.cff`. This repository is structured for GitHub release and Zenodo deposition.
