@@ -37,9 +37,11 @@ def _sha256(path: Path) -> str:
 def check_manifest(strict: bool = False) -> list[str]:
     """Validate hashes for files already listed in MANIFEST_SHA256.csv.
 
-    By default, newly added files are allowed because development branches may
-    add tests or review documents before the DOI manifest is regenerated. Use
-    ``--strict`` only for release-candidate archives.
+    The default mode is intended for development branches and CI: it validates
+    archived data, code, figures and OpenDSS files while allowing README and
+    reproduction-note edits before the DOI manifest is regenerated. Use
+    ``--strict`` for release-candidate archives; strict mode checks every listed
+    file and fails if tracked release-like files are absent from the manifest.
     """
 
     if not MANIFEST.exists():
@@ -52,8 +54,11 @@ def check_manifest(strict: bool = False) -> list[str]:
 
     errors: list[str] = []
     manifest_paths = set(manifest["path"].astype(str))
+    development_mutable_paths = {"README.md", "docs/reproduction.md"}
     for row in manifest.itertuples(index=False):
         rel = str(row.path)
+        if not strict and rel in development_mutable_paths:
+            continue
         path = ROOT / rel
         if not path.exists():
             errors.append(f"missing manifest file: {rel}")
