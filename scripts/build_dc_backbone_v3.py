@@ -966,11 +966,11 @@ abstract = """AI factories are becoming synchronized, DC-native, gigawatt-scale 
 
 intro = """AI factories change the electrical problem that grids must solve. A conventional data center can often be approximated in planning studies as a large but mostly passive load. A modern AI factory is a synchronized computing machine. Training iterations, all-reduce communication, checkpointing and accelerator power-management events can appear electrically as coherent power modulation across thousands of GPUs. At the scale of multiple campuses connected to the same grid pocket, power delivery becomes part of the computing architecture.
 
-The load-side technology trajectory is already moving toward DC. Industry roadmaps describe 800 VDC as a power-distribution architecture for AI data centers and AI factories that reduces current, copper, distribution volume and conversion stages while supporting future high-density racks [1-3]. This makes the 800 VDC interface a relevant terminal boundary for future AI-factory power delivery.
+Recent energy-sector assessments now frame data centers as geographically concentrated point loads whose growth can challenge regional planning timelines [15-17]. The load-side technology trajectory is also moving toward DC. Industry roadmaps describe 800 VDC as a power-distribution architecture for AI data centers and AI factories that reduces current, copper, distribution volume and conversion stages while supporting future high-density racks [1-3]. Earlier 380 V DC and low-voltage DC data-center distribution studies show the same architectural direction at lower voltage classes: reducing conversion stages can improve efficiency and reliability [18,19]. This makes the 800 VDC interface a relevant terminal boundary for future AI-factory power delivery.
 
 If the endpoint is DC, the system-level question is where the AC/DC boundary should be placed. Most current discussions move that boundary from the rack to the facility. This study asks whether it should move farther upstream, into the subtransmission corridor. The proposed architecture uses a utility-operated AC/DC terminal to feed a bipolar subtransmission DC backbone. Campus DC/DC stations then step the backbone to a 34.5 kV DC distribution layer and ultimately to the 800 VDC data-center interface.
 
-Device-level work makes this question technically plausible. A 10 kV SiC 7 kV/400 V DC transformer for future data centers demonstrated 99.0% full-load DC/DC efficiency and 3.8 kW/L power density; the associated 3.8 kV AC to 400 V DC SST chain reached 98.1% full-load efficiency [4]. A modular 5 kV SiC SST demonstrated single-stage MVDC-to-LVDC or MVDC-to-LVAC conversion, full-range zero-voltage switching, controlled dv/dt and modular series/parallel scalability [5]. A 20 kW 1000 V/48 V prototype further shows that raising the data-center distribution voltage can reduce low-voltage current stress, with an estimated efficiency improvement to 97.5% using synchronous rectification [6].
+Device-level work makes this question technically plausible. A 10 kV SiC 7 kV/400 V DC transformer for future data centers demonstrated 99.0% full-load DC/DC efficiency and 3.8 kW/L power density; the associated 3.8 kV AC to 400 V DC SST chain reached 98.1% full-load efficiency [4]. A modular 5 kV SiC SST demonstrated single-stage MVDC-to-LVDC or MVDC-to-LVAC conversion, full-range zero-voltage switching, controlled dv/dt and modular series/parallel scalability [5]. A 20 kW 1000 V/48 V prototype further shows that raising the data-center distribution voltage can reduce low-voltage current stress, with an estimated efficiency improvement to 97.5% using synchronous rectification [6]. More general SST literature likewise treats SSTs as controllable medium-voltage power-electronics interfaces rather than only replacements for low-frequency transformers [20].
 
 The grid-side motivation is also visible. A production-scale AI training power study by Microsoft, OpenAI and NVIDIA reports that synchronized training phases make power swings visible at rack, data-center and grid levels; at scale these swings can reach tens or hundreds of megawatts and can occupy sub-synchronous frequency ranges relevant to utility equipment [7]. That work frames both time-domain ramp constraints and frequency-domain limits, including a 0.1-20 Hz range, as requirements for safe scaling.
 
@@ -1003,16 +1003,16 @@ discussion = """Our results do not imply that every data center should be served
 
 The comparison also shows why efficiency alone is an incomplete criterion. A high-efficiency local-SST sensitivity case can approach or exceed the DC backbone in pure efficiency, but it does not change the architecture. Local SSTs retain multiple AC-facing grid interfaces and do not automatically provide a shared DC layer for buffering synchronized multi-campus load dynamics. The proposed backbone is valuable because the three benefits are co-located at one controllable boundary.
 
-Several technical risks remain. DC protection, pole-to-ground fault detection, hybrid DC breakers, grounding, insulation coordination, converter interoperability and electromagnetic-transient stability must be demonstrated before deployment. We include protection-screening dynamics and an averaged EMT model to make the research boundary explicit, but do not claim a finished hardware design. The decisive follow-up is pilot-grade EMT and hardware-in-the-loop validation of the grid-facing terminal, DC/DC stations and AI-load emulator.
+Several technical risks remain. DC protection, pole-to-ground fault detection, hybrid DC breakers, grounding, insulation coordination, converter interoperability and electromagnetic-transient stability must be demonstrated before deployment. These risks are the same DC-grid feasibility, protection and converter-interoperability questions identified in HVDC-grid and DC/DC-converter guidance [21-23]. We include protection-screening dynamics and an averaged EMT model to make the research boundary explicit, but do not claim a finished hardware design. The decisive follow-up is pilot-grade EMT and hardware-in-the-loop validation of the grid-facing terminal, DC/DC stations and AI-load emulator.
 
 This study reframes AI factories as grid-planning objects rather than only building loads. The central claim is falsifiable: if a multi-campus AI load can be served by a subtransmission DC backbone, then the same upstream DC boundary should simultaneously reduce corridor/conversion losses relative to traditional AC, centralize AC harmonic ownership and reduce sub-synchronous grid-side voltage modulation relative to architectures that keep AC in the corridor. The models and repository are provided to make that claim testable."""
 
 methods = [
-("Architecture boundary", """The evaluation boundary begins at the grid-facing/subtransmission supply point and ends at the 800 VDC data-center interface. The traditional AC case uses a 138 kV AC corridor and downstream AC distribution before conversion to 800 VDC. The local-SST case uses the same AC corridor but converts at each campus using an SST. The proposed case uses a grid-facing AC/DC terminal, a bipolar subtransmission DC corridor, DC/DC conversion to a 34.5 kV DC distribution layer and DC/DC conversion to 800 VDC. The central reference system is a 1 GW three-campus cluster served over a 20 km equivalent corridor. The DC design point is +/-138 kV, or 276 kV pole-to-pole."""),
+("Architecture boundary", """The evaluation boundary begins at the grid-facing/subtransmission supply point and ends at the 800 VDC data-center interface. The traditional AC case uses a 138 kV AC corridor and downstream AC distribution before conversion to 800 VDC. The local-SST case uses the same AC corridor but converts at each campus using an SST. The proposed case uses a grid-facing AC/DC terminal, a bipolar subtransmission DC corridor, DC/DC conversion to a 34.5 kV DC distribution layer and DC/DC conversion to 800 VDC. The DC/DC interface assumptions are architecture-level abstractions of HVDC-to-MVDC conversion functions studied for DC grids [23]. The central reference system is a 1 GW three-campus cluster served over a 20 km equivalent corridor. The DC design point is +/-138 kV, or 276 kV pole-to-pole."""),
 ("Efficiency calculation", """For AC cases, the receiving-end corridor power is P_recv = P/eta_downstream, where P is the useful 800 VDC load and eta_downstream is the downstream conversion efficiency. Corridor current is I_AC = P_recv/(sqrt(3) V_LL pf), AC line loss is 3 I_AC^2 R, grid input is P_recv plus line loss, and total loss is grid input minus P. For the DC case, receiving-end corridor power is P_recv = P/(eta_DC/DC,1 eta_DC/DC,2), bipole current is I_DC = P_recv/V_pp, line loss is 2 I_DC^2 R, grid input is (P_recv plus line loss)/eta_AC/DC, and total loss is grid input minus P. Central assumptions and the 99.0% local-SST efficiency sensitivity case are listed in Supplementary Table 1, and uncertainty ranges are encoded in the public repository."""),
 ("Harmonic screening and OpenDSS-ready network", """The harmonic model is a frequency-domain screening model. It represents the 138 kV grid by a 10 GVA Thevenin short-circuit strength, three corridor buses and harmonic-dependent source impedance with resonance amplification. OpenDSS-compatible circuit files and archived OpenDSSDirect.py harmonic-run artifacts are included in the repository. The figure-generation script also includes an independent nodal-frequency solver that uses the same equivalent network and harmonic spectra, so the screening result can be reproduced without a proprietary EMT tool. The output metrics are PCC voltage THD and individual harmonic voltage distortion. Parameter provenance is summarized in Supplementary Table 1; measured literature values, public planning data and study assumptions are separated in the public data tables."""),
-("Averaged EMT-style model", """The dynamic waveform is synthetic but parameterized from the published structure of AI training power traces: compute phases with high accelerator utilization, periodic communication dips and less frequent checkpointing dips [7]. The traditional AC case passes the waveform directly to the grid. The local-SST case applies a 1.1 s first-order smoothing function. The DC-backbone case applies a 16 s grid-facing power command; the difference between the AI load and the commanded grid power defines shared DC-buffer power. The dynamic robustness grid repeats this averaged model across campus count N = 1, 3, 6 and 10; cluster load P = 0.25, 1, 2 and 4.5 GW; voltage class 69, 138, 230 and 320 kV; short-circuit ratio Ssc/P = 3, 5, 10 and 20; random, partial and coherent temporal phase alignment; and corridor lengths of 5, 20, 50 and 100 km. Supplementary Note 2 gives the averaged state equations and validates the first-order command model by time-step convergence and transfer-function tests. This is an averaged EMT-style comparison of architecture-level exposure, not a switching EMT validation of a specific converter design."""),
-("Protection-zone screening", """Representative protection dynamics are simulated for a backbone pole-to-ground fault and a campus DC/DC internal fault. The model includes detection, converter current limiting, breaker opening, section isolation and healthy-campus re-energization. It is intended to check plausibility and expose the required protection functions; it is not a validated DC-breaker or insulation-coordination design.""")]
+("Averaged EMT-style model", """The dynamic waveform is synthetic but parameterized from the published structure of AI training power traces: compute phases with high accelerator utilization, periodic communication dips and less frequent checkpointing dips [7]. The traditional AC case passes the waveform directly to the grid. The local-SST case applies a 1.1 s first-order smoothing function. The DC-backbone case applies a 16 s grid-facing power command; the difference between the AI load and the commanded grid power defines shared DC-buffer power. The dynamic robustness grid repeats this averaged model across campus count N = 1, 3, 6 and 10; cluster load P = 0.25, 1, 2 and 4.5 GW; voltage class 69, 138, 230 and 320 kV; short-circuit ratio Ssc/P = 3, 5, 10 and 20; random, partial and coherent temporal phase alignment; and corridor lengths of 5, 20, 50 and 100 km. Supplementary Note 2 gives the averaged state equations and validates the first-order command model by time-step convergence and transfer-function tests. The voltage and spectral metrics are screening proxies aligned with voltage-fluctuation and interconnection-oscillation concerns [13,14]. This is an averaged EMT-style comparison of architecture-level exposure, not a switching EMT validation of a specific converter design."""),
+("Protection-zone screening", """Representative protection dynamics are simulated for a backbone pole-to-ground fault and a campus DC/DC internal fault. The model includes detection, converter current limiting, breaker opening, section isolation and healthy-campus re-energization. It is intended to check plausibility and expose the required protection functions identified in DC-grid protection studies [21,22]; it is not a validated DC-breaker or insulation-coordination design.""")]
 
 figure_legends = {
 'Fig. 1 | Three power-delivery architectures for AI factories.':'One-line-style diagrams compare the grid-facing boundary of three architectures. Orange lines denote AC sections, blue lines denote DC sections and grey boxes denote substation or campus switchyard equipment. a, Traditional AC delivery keeps AC in the subtransmission corridor and campus switchyards before conversion to the 800 VDC data-center boundary. b, Local SST delivery uses the same AC corridor but converts at each AI campus, with AC input and DC output shown explicitly. c, The proposed architecture moves the AC/DC boundary to a utility converter terminal and feeds multiple campuses from a subtransmission DC backbone, with DC/DC conversion to 34.5 kV DC and then to 800 VDC.',
@@ -1041,10 +1041,20 @@ references = [
 "LS Power. LS Power selected by the California ISO for San Jose area HVDC projects. Press release (8 March 2023); https://www.lspower.com/news/ls-power-selected-by-the-california-iso-for-san-jose-area-hvdc-projects/ (accessed 27 May 2026).",
 "LS Power Grid. Power Santa Clara Valley HVDC Project fact sheet (2025); https://www.lspowergrid.com/wp-content/uploads/Power-Santa-Clara-Valley-2-Pager.pdf (accessed 27 May 2026).",
 "IEC. IEC 61000-3-3: Electromagnetic compatibility - limits for voltage changes, voltage fluctuations and flicker (IEC, 2013).",
-"North American Electric Reliability Corporation. Interconnection oscillation analysis. Technical report (2019)."
+"North American Electric Reliability Corporation. Interconnection oscillation analysis. Technical report (2019); https://www.ercot.com/files/docs/2019/10/02/Interconnection_Oscillation_Analysis_NERC.pdf.",
+"Shehabi, A. et al. 2024 United States Data Center Energy Usage Report. Lawrence Berkeley National Laboratory (2024). https://doi.org/10.71468/P1WC7Q.",
+"Electric Power Research Institute. Powering Intelligence: Analyzing Artificial Intelligence and Data Center Energy Consumption. EPRI White Paper 3002028905 (May 2024); https://restservice.epri.com/publicdownload/000000003002028905/0/Product.",
+"International Energy Agency. Energy and AI. IEA, Paris (2025); https://www.iea.org/reports/energy-and-ai.",
+"Shrestha, B. R. et al. Efficiency and reliability analyses of AC and 380 V DC distribution in data centers. IEEE Access 6, 63305-63315 (2018). https://doi.org/10.1109/ACCESS.2018.2877354.",
+"Open Compute Project. Data Center Facility Power Distribution LVDC White Paper, version 1.0 (30 March 2026); https://www.opencompute.org/documents/dcf-power-distribution-lvdc-white-paper-version-1-0-final-pdf-1.",
+"She, X., Huang, A. Q. & Burgos, R. Review of solid-state transformer technologies and their application in power distribution systems. IEEE J. Emerg. Sel. Top. Power Electron. 1, 186-198 (2013). https://doi.org/10.1109/JESTPE.2013.2277917.",
+"CIGRE Working Group B4.52. HVDC grid feasibility study. CIGRE Technical Brochure 533 (2013); https://www.e-cigre.org/publications/detail/533-hvdc-grid-feasibility-study.html.",
+"CIGRE Joint Working Group B4/B5.59. Protection and local control of HVDC-grids. CIGRE Technical Brochure 739 (2018); https://www.e-cigre.org/publications/detail/739-protection-and-local-control-of-hvdc-grids.html.",
+"CIGRE Working Group B4.76. DC-DC converters in HVDC grids and for connections to HVDC systems. CIGRE Technical Brochure 827 (2021); https://electra.cigre.org/315-april-2021/technical-brochures/dc-dc-converters-in-hvdc-grids-and-for-connections-to-hvdc-systems.html."
 ]
 
 main_md = '# Direct-current subtransmission backbones for grid-stable AI factories\n\n'
+main_md += 'Zhengjie Yang^1,* and Liang Min^1,*\n\n^1 Stanford University, Stanford, CA, USA.\n\n*Correspondence: yjane@stanford.edu; liangmin@stanford.edu\n\n'
 main_md += '## Abstract\n' + abstract + '\n\n'
 main_md += '## Introduction\n' + intro + '\n\n'
 main_md += '## Results\n\n'
@@ -1055,6 +1065,8 @@ for h,txt in methods: main_md += f'### {h}\n{txt}\n\n'
 main_md += '## Data availability\n' + data_availability + '\n\n'
 main_md += '## Code availability\n' + code_availability + '\n\n'
 main_md += '## AI-assisted drafting disclosure\n' + ai_disclosure + '\n\n'
+main_md += '## Author contributions\nZ.Y. and L.M. contributed to the conceptual framing, analysis and manuscript preparation. Both authors reviewed and approved the manuscript.\n\n'
+main_md += '## Competing interests\nThe authors declare no competing interests.\n\n'
 main_md += '## Figure legends\n\n'
 for k,v in figure_legends.items(): main_md += f'**{k}** {v}\n\n'
 main_md += '## References\n\n'
@@ -1151,7 +1163,9 @@ def create_main_docx():
     doc=Document(); style_doc(doc)
     sec=doc.sections[0]; sec.top_margin=Inches(0.65); sec.bottom_margin=Inches(0.65); sec.left_margin=Inches(0.7); sec.right_margin=Inches(0.7)
     title=doc.add_paragraph(); title.style='Title'; title.add_run('Direct-current subtransmission backbones for grid-stable AI factories')
-    add_para(doc,'Authors: [to be completed]')
+    add_para(doc,'Zhengjie Yang and Liang Min')
+    add_para(doc,'Stanford University, Stanford, CA, USA')
+    add_para(doc,'Correspondence: yjane@stanford.edu; liangmin@stanford.edu')
     doc.add_heading('Abstract',level=1); add_para(doc,abstract)
     doc.add_heading('Introduction',level=1)
     for para in intro.split('\n\n'): add_para(doc,para)
@@ -1174,6 +1188,10 @@ def create_main_docx():
     doc.add_heading('Data availability',level=1); add_para(doc,data_availability)
     doc.add_heading('Code availability',level=1); add_para(doc,code_availability)
     doc.add_heading('AI-assisted drafting disclosure',level=1); add_para(doc,ai_disclosure)
+    doc.add_heading('Author contributions',level=1)
+    add_para(doc,'Z.Y. and L.M. contributed to the conceptual framing, analysis and manuscript preparation. Both authors reviewed and approved the manuscript.')
+    doc.add_heading('Competing interests',level=1)
+    add_para(doc,'The authors declare no competing interests.')
     doc.add_heading('References',level=1)
     for i,refi in enumerate(references,1): add_para(doc,f'{i}. {refi}')
     out=ROOT/'Direct_current_subtransmission_backbones_for_grid_stable_AI_factories_NComms_v3.docx'
@@ -1309,13 +1327,13 @@ if not (REPO/'scripts'/'reproduce_all.py').exists():
     python scripts/run_opendss_if_available.py  # optional, requires opendssdirect.py
     ```
 
-    `scripts/reproduce_all.py` regenerates the archived OpenDSS Fig. 3 diagnostic,
+    `scripts/reproduce_all.py` regenerates the archived Fig. 3 diagnostic,
     Fig. 4 and Fig. 5 from archived CSV outputs into `reproduced/figures`.
     `scripts/dynamic_robustness_sweep.py` regenerates the full dynamic scenario
     grid used for the Fig. 4 fluctuation and voltage envelopes.
-    `scripts/harmonic_robustness_sweep.py` regenerates the final two-panel Fig. 3
-    and the full harmonic robustness grid. The manuscript figures were generated
-    with transparent Python models. OpenDSS circuit files and the run log are
+    `scripts/harmonic_robustness_sweep.py` regenerates the harmonic robustness
+    grid and supporting figures. The manuscript figures were generated with
+    transparent Python models. OpenDSS circuit files and the run log are
     included under `opendss/`.
 
     ## Citation
@@ -1337,8 +1355,14 @@ if not (REPO/'scripts'/'reproduce_all.py').exists():
     message: "If you use this code or data, please cite the associated manuscript and this archive."
     type: software
     authors:
-      - family-names: "TBD"
-        given-names: "TBD"
+      - family-names: "Yang"
+        given-names: "Zhengjie"
+        email: "yjane@stanford.edu"
+        affiliation: "Stanford University"
+      - family-names: "Min"
+        given-names: "Liang"
+        email: "liangmin@stanford.edu"
+        affiliation: "Stanford University"
     version: "0.3.0"
     date-released: "2026-05-26"
     license: "MIT"
@@ -1373,8 +1397,8 @@ if not (REPO/'scripts'/'reproduce_all.py').exists():
     python scripts/dynamic_robustness_sweep.py
     ```
 
-    To regenerate the final two-panel Fig. 3, the full harmonic robustness sweep,
-    Supplementary Figs. S5-S6 and the supporting CSV tables, run:
+    To regenerate the harmonic robustness sweep, the supporting Fig. 3 screening
+    variant, Supplementary Figs. S5-S6 and the supporting CSV tables, run:
 
     ```bash
     python scripts/harmonic_robustness_sweep.py
@@ -1394,12 +1418,13 @@ if not (REPO/'scripts'/'reproduce_all.py').exists():
     No final manuscript figure is a generative-AI image, photo-realistic rendering,
     stock image, screenshot collage or manually edited bitmap. The distributed PNG,
     SVG and PDF files are Matplotlib exports. The SVG files can be inspected as
-    vector graphics, and `scripts/reproduce_all.py` regenerates Fig. 3 and Fig. 4
-    from source CSV files as a fast submission check.
+    vector graphics. `scripts/reproduce_all.py` regenerates the archived Fig. 3
+    diagnostic, Fig. 4 and Fig. 5 from source CSV files as a fast review-time
+    check.
     `scripts/dynamic_robustness_sweep.py` regenerates the Fig. 4 dynamic scenario
     grid and supporting CSV tables.
-    `scripts/harmonic_robustness_sweep.py` regenerates the final two-panel Fig. 3,
-    the harmonic robustness screening figures and the supporting CSV tables.
+    `scripts/harmonic_robustness_sweep.py` regenerates the harmonic robustness
+    screening figures and the supporting CSV tables.
 
     Final figure files:
 

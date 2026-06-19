@@ -1,0 +1,26 @@
+{
+  "transmission_backend": "GridDyn",
+  "distribution_backend": "OpenDSSDirect.py",
+  "federation_layer": "HELICS",
+  "griddyn_executable": "/tmp/GridDyn-build/bin/gridDynMain",
+  "griddyn_case": "/Users/zhengjieyang/Library/CloudStorage/Dropbox (5-28-26 21:20)/dc-ai-factory-backbone-reproducibility/cosim/griddyn_td_dynamic_var/results/griddyn_ieee39_repeated_fault_case.xml",
+  "griddyn_recorder_csv": "/Users/zhengjieyang/Library/CloudStorage/Dropbox (5-28-26 21:20)/dc-ai-factory-backbone-reproducibility/cosim/griddyn_td_dynamic_var/results/griddyn_ieee39_repeated_fault_recorder.csv",
+  "poi_voltage_field": "BUS_17:voltage",
+  "event_csv": "/Users/zhengjieyang/Library/CloudStorage/Dropbox (5-28-26 21:20)/dc-ai-factory-backbone-reproducibility/cosim/griddyn_td_dynamic_var/eastern_interconnection_2024_voltage_sag_train.csv",
+  "federation_plan": "/Users/zhengjieyang/Library/CloudStorage/Dropbox (5-28-26 21:20)/dc-ai-factory-backbone-reproducibility/cosim/griddyn_td_dynamic_var/helics_federation_plan.json",
+  "output_dir": "/Users/zhengjieyang/Library/CloudStorage/Dropbox (5-28-26 21:20)/dc-ai-factory-backbone-reproducibility/cosim/griddyn_td_dynamic_var/results",
+  "scenarios": [
+    "baseline",
+    "local_34p5kv",
+    "central_138kv"
+  ],
+  "executed": true,
+  "note": "Default case uses GridDyn's IEEE 39 dynamic event data. Pass --griddyn-case for an IEEE 118 or Texas A&M 150-bus dynamic GridDyn case when available.",
+  "timeseries_csv": "/Users/zhengjieyang/Library/CloudStorage/Dropbox (5-28-26 21:20)/dc-ai-factory-backbone-reproducibility/cosim/griddyn_td_dynamic_var/results/helics_opendss_dynamic_var_timeseries.csv",
+  "summary_csv": "/Users/zhengjieyang/Library/CloudStorage/Dropbox (5-28-26 21:20)/dc-ai-factory-backbone-reproducibility/cosim/griddyn_td_dynamic_var/results/helics_opendss_dynamic_var_summary.csv",
+  "grid_dyn_voltage_samples": 5704,
+  "tool_versions": {
+    "helics": "3.6.1 (2025-02-24)",
+    "opendssdirect": "0.9.4"
+  }
+}

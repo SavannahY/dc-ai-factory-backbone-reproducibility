@@ -4,7 +4,12 @@
   "description": "Source data, OpenDSS harmonic-network cases, figure-generation scripts and verification tests supporting the manuscript \"Direct-current subtransmission backbones for grid-stable AI factories\".",
   "creators": [
     {
-      "name": "TBD author team"
+      "name": "Yang, Zhengjie",
+      "affiliation": "Stanford University"
+    },
+    {
+      "name": "Min, Liang",
+      "affiliation": "Stanford University"
     }
   ],
   "license": "mit",

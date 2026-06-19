@@ -1,0 +1,4 @@
+New RegControl.reg_creguladortension(r:p1udt2580-p1uhs0_1247) transformer=trans_reg_creguladortension(r:p1udt2580-p1uhs0_1247) winding=2 ptratio=59.99631547328862 band=2.4 vreg = 123.60000000000001
+
+New RegControl.reg_creguladortension(r:p1udt1178-p1udt710) transformer=trans_reg_creguladortension(r:p1udt1178-p1udt710) winding=2 ptratio=60.0 band=2.4 vreg = 123.60000000000001
+

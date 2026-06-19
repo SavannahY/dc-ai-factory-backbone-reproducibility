@@ -2,7 +2,7 @@ import math, json
 from pathlib import Path
 import numpy as np, pandas as pd
 import opendssdirect as dss
-ROOT=Path('/mnt/data/dc_backbone_ncomms_v3')
+ROOT=Path(__file__).resolve().parents[1]
 DATA=ROOT/'data'
 OP=ROOT/'opendss'
 HARMONICS=np.array([5,7,11,13,17,19,23,25])

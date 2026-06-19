@@ -1,0 +1,4 @@
+scenario,samples,poi_min_voltage_pu,poi_min_time_s,datacenter_min_ac_voltage_pu,datacenter_min_ac_time_s,max_local_q_kvar,max_central_q_kvar,tripped_on_ac_voltage,all_opendss_solves_converged
+baseline,5704,0.32494372,62.86,0.31326272475859246,62.86,0.0,0.0,True,True
+local_34p5kv,5704,0.32494372,62.86,0.3216854468257974,79.24,120000.0,0.0,True,True
+central_138kv,5704,0.32494372,62.86,0.3216854468257974,79.24,0.0,120000.0,True,True

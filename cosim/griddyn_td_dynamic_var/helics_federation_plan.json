@@ -1,0 +1,63 @@
+{
+  "name": "griddyn_opendss_dynamic_var_study",
+  "status": "executed_local_ieee39_dynamic_demo",
+  "federation_layer": "HELICS",
+  "transmission_federate": {
+    "backend": "GridDyn",
+    "case_requirement": "Executed demo uses GridDyn IEEE 39 dynamic data; IEEE 118-bus or Texas A&M 150-bus dynamic GridDyn case can be supplied with --griddyn-case.",
+    "publishes": [
+      "<scenario>/transmission/poi_voltage_pu"
+    ],
+    "subscribes": [
+      "<scenario>/distribution/load_kw"
+    ]
+  },
+  "distribution_federate": {
+    "backend": "OpenDSS/PyDSS",
+    "case_requirement": "Selected feeder with data-center aggregate at the 34.5 kV AC side",
+    "publishes": [
+      "<scenario>/distribution/datacenter_ac_voltage_pu",
+      "<scenario>/distribution/load_kw",
+      "<scenario>/distribution/load_kvar"
+    ],
+    "subscribes": [
+      "<scenario>/transmission/poi_voltage_pu",
+      "<scenario>/controller/local_q_kvar",
+      "<scenario>/controller/central_q_kvar"
+    ]
+  },
+  "controller_federate": {
+    "backend": "Python or PyDSS user-defined controller",
+    "cases": [
+      "baseline_no_added_dynamic_var",
+      "local_sst_34p5kv_dynamic_var",
+      "local_sst_with_legacy_voltage_devices",
+      "centralized_115_138kv_dynamic_var",
+      "coordinated_local_and_centralized"
+    ],
+    "publishes": [
+      "<scenario>/controller/local_q_kvar",
+      "<scenario>/controller/central_q_kvar"
+    ],
+    "subscribes": [
+      "<scenario>/distribution/datacenter_ac_voltage_pu"
+    ]
+  },
+  "disturbance": {
+    "event_csv": "eastern_interconnection_2024_voltage_sag_train.csv",
+    "description": "Six short GridDyn line-fault events over about 82 s. The executed demo POI channel BUS_17:voltage reached 0.325 pu."
+  },
+  "metrics": [
+    "minimum_115_138kv_poi_voltage_pu",
+    "minimum_34p5kv_service_voltage_pu",
+    "data_center_load_served_fraction",
+    "ride_through_pass",
+    "recovery_time_to_90pct_s",
+    "maximum_dynamic_var_mvar",
+    "rms_dynamic_var_mvar",
+    "ltc_tap_operations",
+    "capacitor_bank_switching_events",
+    "var_command_sign_reversals",
+    "post_fault_voltage_hunting_pct"
+  ]
+}

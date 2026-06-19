@@ -1,0 +1,7 @@
+event_index,start_s,duration_s,voltage_pu,description
+1,30.0,0.042,0.38,Eastern Interconnection 2024 inspired sag
+2,46.4,0.05,0.35,Eastern Interconnection 2024 inspired sag
+3,62.8,0.066,0.4,Eastern Interconnection 2024 inspired sag
+4,79.2,0.058,0.25,Eastern Interconnection 2024 inspired sag
+5,95.6,0.045,0.32,Eastern Interconnection 2024 inspired sag
+6,112.0,0.06,0.37,Eastern Interconnection 2024 inspired sag

@@ -22,12 +22,46 @@ voltage envelopes, run:
 python scripts/dynamic_robustness_sweep.py
 ```
 
-To regenerate the final two-panel Fig. 3, the full harmonic robustness sweep,
-Supplementary Figs. S5-S6 and the supporting CSV tables, run:
+To regenerate the harmonic robustness sweep, the supporting Fig. 3 screening
+variant, Supplementary Figs. S5-S6 and the supporting CSV tables, run:
 
 ```bash
 python scripts/harmonic_robustness_sweep.py
 ```
+
+To regenerate the Texas T&D C0/C1/C2/C3 add-on study for transfer capacity,
+efficiency, harmonics and dynamic voltage exposure, run:
+
+```bash
+python scripts/texas_td_c0_c2_c3_scenarios.py
+```
+
+The script uses the archived A/B screening catalogs by default. C0 and C1 are
+treated as the same traditional 400 V AC facility-side architecture. To build
+the main-dataset A corridor catalog from a downloaded Texas7k MATPOWER case,
+pass `--texas7k-matpower path/to/case.m`. PowerWorld and PSS/E are not required
+for this steady-state screening path. Distribution validation remains an OpenDSS
+selected-feeder path; the full Texas OpenDSS dataset is intentionally not pulled
+into the main transmission hosting-capacity loop.
+
+The HELICS GridDyn/OpenDSS protocol for a follow-on transmission-distribution
+dynamic VAR study is documented in `docs/helics_td_dynamic_var_study.md`. It is
+not part of the archived smoke-test command because it requires external
+simulator installation and case-specific co-simulation setup.
+
+To run the local executed demo after building GridDyn and installing HELICS plus
+OpenDSSDirect.py in the Python environment, run:
+
+```bash
+python scripts/run_griddyn_td_dynamic_var.py \
+  --griddyn-exe /path/to/gridDynMain \
+  --execute
+```
+
+The resulting manifest, GridDyn recorder, HELICS/OpenDSS time series and summary
+CSV files are under `cosim/griddyn_td_dynamic_var/results/`. The default demo
+uses GridDyn's IEEE 39 dynamic case; pass `--griddyn-case` and
+`--poi-voltage-field` for an IEEE 118 or Texas A&M 150-bus dynamic case.
 
 The dynamic and harmonic sweeps each evaluate 3,072 input-grid points and 9,216
 architecture cases across campus count, cluster load, voltage class,

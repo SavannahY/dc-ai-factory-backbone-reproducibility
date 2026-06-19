@@ -1,4 +1,5 @@
 /.pytest_cache/
+/.venv/
 /reproduced/
 /submission_package/
 /DC_backbone_AI_factories_NComms_v3_full_package.zip
@@ -18,3 +19,4 @@ __pycache__/
 *.synctex.gz
 *.toc
 *.zip
+*_SavedVoltages.dbl

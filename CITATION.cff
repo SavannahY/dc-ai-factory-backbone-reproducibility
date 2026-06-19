@@ -4,8 +4,14 @@ title: "Code and data for Direct-current subtransmission backbones for grid-stab
 message: "If you use this code or data, please cite the associated manuscript and this archive."
 type: software
 authors:
-  - family-names: "TBD"
-    given-names: "TBD"
+  - family-names: "Yang"
+    given-names: "Zhengjie"
+    email: "yjane@stanford.edu"
+    affiliation: "Stanford University"
+  - family-names: "Min"
+    given-names: "Liang"
+    email: "liangmin@stanford.edu"
+    affiliation: "Stanford University"
 version: "0.3.0"
 date-released: "2026-05-26"
 license: "MIT"

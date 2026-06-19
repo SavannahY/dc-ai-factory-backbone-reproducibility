@@ -2,11 +2,11 @@
 """Regenerate key diagnostic figures from the archived CSV outputs.
 
 This public repository includes all source CSV files used for the manuscript
-figures. Running this script rebuilds the archived OpenDSS Fig. 3 diagnostic,
-Fig. 4 and Fig. 5 into ``reproduced/figures`` as a fast submission-time
+figures. Running this script rebuilds the archived Fig. 3 diagnostic,
+Fig. 4 and Fig. 5 into ``reproduced/figures`` as a fast review-time
 reproducibility check. The Fig. 4 dynamic scenario grid is regenerated with
-``scripts/dynamic_robustness_sweep.py``; the final two-panel Fig. 3 and harmonic
-robustness sweep are regenerated with ``scripts/harmonic_robustness_sweep.py``.
+``scripts/dynamic_robustness_sweep.py``; the harmonic robustness sweep and its
+supporting figures are regenerated with ``scripts/harmonic_robustness_sweep.py``.
 """
 import os
 import tempfile
