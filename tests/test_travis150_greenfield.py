@@ -10,6 +10,7 @@ from ai_dc_backbone.travis150_greenfield import (
     SCENARIOS,
     fallback_travis_corridors,
     greenfield_corridor,
+    load_travis_greenfield_corridors,
     run_harmonic_screen,
     run_transfer_screen,
     run_voltage_screen,
@@ -36,6 +37,24 @@ def test_fallback_uses_one_flagship_travis_corridor_and_excludes_native_load():
     assert corridor.existing_load_mw > 0.0
     assert dcorridor.existing_load_mw == 0.0
     assert dcorridor.converter_rating_mw > corridor.converter_rating_mw
+
+
+def test_powerworld_aux_travis_case_imports_when_present():
+    aux_path = ROOT / "Travis150" / "Travis150_Electric_Data.aux"
+    if not aux_path.exists():
+        return
+
+    corridors, source = load_travis_greenfield_corridors(aux_path)
+    corridor = corridors[0]
+
+    assert source.startswith("powerworld_aux:")
+    assert corridor.dataset_id == "B"
+    assert "PowerWorld AUX" in corridor.dataset_role
+    assert corridor.pocket_id.startswith("TRAVIS150-AUX-")
+    assert corridor.voltage_kv >= 100.0
+    assert corridor.length_km > 0.0
+    assert corridor.source_bus != corridor.load_bus
+    assert corridor.current_limit_kA >= 3.2
 
 
 def test_greenfield_transfer_capacity_reports_new_line_not_conversion():

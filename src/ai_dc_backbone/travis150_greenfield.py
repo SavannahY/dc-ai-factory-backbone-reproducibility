@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from pathlib import Path
 import math
+import re
+import shlex
 
 import numpy as np
 import pandas as pd
@@ -173,6 +175,112 @@ def fallback_travis_corridors(flagship_pocket: str = DEFAULT_FLAGSHIP_POCKET) ->
     return sorted(corridors, key=lambda c: (c.converter_rating_mw, c.short_circuit_gva), reverse=True)[:1]
 
 
+def load_powerworld_aux_corridors(path: str | Path, max_corridors: int = 12) -> list[CorridorCase]:
+    """Build greenfield data-center corridor candidates from a PowerWorld AUX case.
+
+    The Travis 150 public electric case is distributed as PowerWorld data.  For
+    this greenfield study, the AUX branch data is used for placement, voltage
+    class, impedance and source strength; the modeled corridor is still a new
+    purpose-built data-center line rather than an existing-line conversion.
+    """
+
+    blocks = _parse_powerworld_aux(Path(path))
+    buses = _require_aux_rows(blocks, "Bus")
+    branches = _require_aux_rows(blocks, "Branch")
+    bus_by_num = {_to_int(row["BusNum"]): row for row in buses if _has_value(row.get("BusNum"))}
+    coords_by_sub = _substation_coordinates(blocks.get("Substation", []))
+    load_mw = _aux_load_mw_by_bus(blocks.get("Load", []))
+    gen_mw = _aux_gen_mw_by_bus(blocks.get("Gen", []), "GenMWSetPoint")
+    gen_mvar_cap = _aux_gen_mw_by_bus(blocks.get("Gen", []), "GenMVRMax")
+
+    candidates = []
+    for row in branches:
+        if row.get("BranchDeviceType", "").strip() != "Line":
+            continue
+        if not _aux_is_closed(row.get("LineStatus", "")):
+            continue
+        from_bus_num = _to_int(row.get("BusNum"))
+        to_bus_num = _to_int(row.get("BusNum:1"))
+        if from_bus_num not in bus_by_num or to_bus_num not in bus_by_num:
+            continue
+
+        from_bus = bus_by_num[from_bus_num]
+        to_bus = bus_by_num[to_bus_num]
+        from_kv = _to_float(from_bus.get("BusNomVolt"))
+        to_kv = _to_float(to_bus.get("BusNomVolt"))
+        if not math.isfinite(from_kv) or not math.isfinite(to_kv):
+            continue
+        voltage_kv = min(from_kv, to_kv)
+        if voltage_kv < 100.0:
+            continue
+        if abs(from_kv - to_kv) / max(from_kv, to_kv, 1.0) > 0.10:
+            continue
+
+        source_num, sink_num = _orient_source_sink(from_bus_num, to_bus_num, bus_by_num, gen_mw, load_mw)
+        source_bus = bus_by_num[source_num]
+        sink_bus = bus_by_num[sink_num]
+
+        length_km = _aux_branch_length_km(row, from_bus, to_bus, coords_by_sub)
+        line_r_pu = abs(_to_float(row.get("LineR"), 0.0))
+        line_x_pu = abs(_to_float(row.get("LineX"), 0.0))
+        z_base_ohm = voltage_kv**2 / 100.0
+        r_ohm_km = _bounded_impedance(line_r_pu * z_base_ohm / length_km, 0.004, 0.080, 0.026)
+        x_ohm_km = _bounded_impedance(line_x_pu * z_base_ohm / length_km, 0.030, 0.420, 0.155)
+
+        aux_rate_mva = max(_to_float(row.get("LineAMVA"), 0.0), 0.0)
+        aux_current_kA = aux_rate_mva / (math.sqrt(3.0) * voltage_kv) if aux_rate_mva > 0 else 0.0
+        current_limit_kA = max(aux_current_kA, _greenfield_current_floor_kA(voltage_kv))
+        planned_mva = math.sqrt(3.0) * voltage_kv * current_limit_kA
+        source_gen_mw = max(gen_mw.get(source_num, 0.0), 0.0)
+        sink_gen_mw = max(gen_mw.get(sink_num, 0.0), 0.0)
+        sink_load_mw = max(load_mw.get(sink_num, 0.0), 0.0)
+        short_circuit_gva = min(16.0, max(4.0, 3.5 + source_gen_mw / 180.0 + planned_mva / 250.0))
+        source_q_limit_mvar = min(850.0, max(260.0, 45.0 * short_circuit_gva + 0.20 * gen_mvar_cap.get(source_num, 0.0)))
+        converter_rating_mw = max(1000.0, 0.95 * planned_mva, 0.95 * aux_rate_mva)
+
+        data_center_bonus = 40.0 if "Travis_DS" in str(sink_bus.get("BusName", "")) else 0.0
+        score = planned_mva + 0.30 * source_gen_mw + 2.0 * sink_load_mw - 0.55 * sink_gen_mw - 1.1 * length_km
+        score += data_center_bonus
+        candidates.append(
+            (
+                score,
+                CorridorCase(
+                    dataset_id="B",
+                    dataset_role="Travis 150 synthetic electric case (PowerWorld AUX electric side; gas ignored)",
+                    pocket_id="",
+                    source_bus=_aux_bus_label(source_num, source_bus),
+                    load_bus=_aux_bus_label(sink_num, sink_bus),
+                    voltage_kv=float(voltage_kv),
+                    length_km=float(length_km),
+                    r_ohm_km=float(r_ohm_km),
+                    x_ohm_km=float(x_ohm_km),
+                    current_limit_kA=float(current_limit_kA),
+                    short_circuit_gva=float(short_circuit_gva),
+                    source_q_limit_mvar=float(source_q_limit_mvar),
+                    converter_rating_mw=float(converter_rating_mw),
+                    existing_load_mw=float(sink_load_mw),
+                    vdc_pp_kv=2.0 * float(voltage_kv),
+                ),
+            )
+        )
+
+    if not candidates:
+        raise ValueError(f"No closed high-voltage Travis 150 line candidates were found in {path}")
+
+    ranked = sorted(candidates, key=lambda item: item[0], reverse=True)[:max_corridors]
+    corridors = []
+    seen: set[tuple[str, str, float]] = set()
+    for rank, (_score, corridor) in enumerate(ranked, start=1):
+        key = (corridor.source_bus, corridor.load_bus, round(corridor.length_km, 3))
+        if key in seen:
+            continue
+        seen.add(key)
+        corridors.append(replace(corridor, pocket_id=f"TRAVIS150-AUX-{rank:03d}"))
+    if not corridors:
+        raise ValueError(f"No unique Travis 150 high-voltage line candidates were found in {path}")
+    return corridors[:max_corridors]
+
+
 def load_travis_greenfield_corridors(
     travis_case: str | Path | None = None,
     flagship_pocket: str = DEFAULT_FLAGSHIP_POCKET,
@@ -181,9 +289,9 @@ def load_travis_greenfield_corridors(
     """Load Travis 150 electric corridors from a user-supplied case or fallback catalog.
 
     The importer supports a CSV corridor catalog with ``source_bus`` and
-    ``load_bus`` columns or a MATPOWER-style ``.m`` case.  The public TAMU page
-    serves the data through a form, so the repository keeps a deterministic
-    fallback for tests and examples.
+    ``load_bus`` columns, a MATPOWER-style ``.m`` case, or the Travis 150
+    PowerWorld ``.aux`` electric case.  The repository keeps a deterministic
+    fallback for tests and examples when a downloaded case is not supplied.
     """
 
     if travis_case is None:
@@ -242,6 +350,10 @@ def load_travis_greenfield_corridors(
         )
         return _select_flagship(corridors), f"matpower:{path}"
 
+    if path.suffix.lower() == ".aux":
+        corridors = load_powerworld_aux_corridors(path, max_corridors=max_corridors)
+        return _select_flagship(corridors), f"powerworld_aux:{path}"
+
     raise ValueError(f"Unsupported Travis electric case format: {path.suffix}")
 
 
@@ -249,6 +361,165 @@ def _select_flagship(corridors: list[CorridorCase]) -> list[CorridorCase]:
     if not corridors:
         raise ValueError("No Travis 150 electric corridors were found")
     return [sorted(corridors, key=lambda c: (c.converter_rating_mw, c.short_circuit_gva, -c.length_km), reverse=True)[0]]
+
+
+def _parse_powerworld_aux(path: Path) -> dict[str, list[dict[str, str]]]:
+    text = path.read_text(encoding="utf-8", errors="replace")
+    blocks: dict[str, list[dict[str, str]]] = {}
+    pattern = re.compile(r"DATA\s*\(([^,]+),\s*\[(.*?)\]\)\s*\{(.*?)\r?\n\}", re.S)
+    for match in pattern.finditer(text):
+        block_name = match.group(1).strip()
+        columns = [column.strip() for column in re.sub(r"\s+", "", match.group(2)).split(",") if column.strip()]
+        rows = blocks.setdefault(block_name, [])
+        for line in match.group(3).splitlines():
+            if not line.strip():
+                continue
+            values = _split_aux_row(line)
+            if len(values) == len(columns):
+                rows.append(dict(zip(columns, values)))
+    return blocks
+
+
+def _split_aux_row(line: str) -> list[str]:
+    lexer = shlex.shlex(line, posix=True)
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    return [value.strip() for value in lexer]
+
+
+def _require_aux_rows(blocks: dict[str, list[dict[str, str]]], block_name: str) -> list[dict[str, str]]:
+    rows = blocks.get(block_name, [])
+    if not rows:
+        raise ValueError(f"PowerWorld AUX file does not contain parseable {block_name} rows")
+    return rows
+
+
+def _aux_is_closed(value: str) -> bool:
+    return str(value).strip().lower() == "closed"
+
+
+def _has_value(value: str | None) -> bool:
+    return value is not None and str(value).strip() != ""
+
+
+def _to_float(value: str | None, default: float = math.nan) -> float:
+    if value is None or str(value).strip() == "":
+        return default
+    try:
+        return float(str(value).strip())
+    except ValueError:
+        return default
+
+
+def _to_int(value: str | None, default: int = -1) -> int:
+    numeric = _to_float(value, math.nan)
+    return int(numeric) if math.isfinite(numeric) else default
+
+
+def _substation_coordinates(rows: list[dict[str, str]]) -> dict[int, tuple[float, float]]:
+    coords: dict[int, tuple[float, float]] = {}
+    for row in rows:
+        sub_num = _to_int(row.get("SubNum"))
+        lat = _to_float(row.get("Latitude"))
+        lon = _to_float(row.get("Longitude"))
+        if sub_num >= 0 and math.isfinite(lat) and math.isfinite(lon):
+            coords[sub_num] = (lat, lon)
+    return coords
+
+
+def _aux_load_mw_by_bus(rows: list[dict[str, str]]) -> dict[int, float]:
+    loads: dict[int, float] = {}
+    for row in rows:
+        if not _aux_is_closed(row.get("LoadStatus", "")):
+            continue
+        bus_num = _to_int(row.get("BusNum"))
+        if bus_num < 0:
+            continue
+        mw = _to_float(row.get("LoadSMW"), 0.0) + _to_float(row.get("LoadIMW"), 0.0) + _to_float(row.get("LoadZMW"), 0.0)
+        loads[bus_num] = loads.get(bus_num, 0.0) + max(0.0, mw)
+    return loads
+
+
+def _aux_gen_mw_by_bus(rows: list[dict[str, str]], field: str) -> dict[int, float]:
+    values: dict[int, float] = {}
+    for row in rows:
+        if not _aux_is_closed(row.get("GenStatus", "")):
+            continue
+        bus_num = _to_int(row.get("BusNum"))
+        if bus_num < 0:
+            continue
+        values[bus_num] = values.get(bus_num, 0.0) + max(0.0, _to_float(row.get(field), 0.0))
+    return values
+
+
+def _orient_source_sink(
+    from_bus_num: int,
+    to_bus_num: int,
+    bus_by_num: dict[int, dict[str, str]],
+    gen_mw: dict[int, float],
+    load_mw: dict[int, float],
+) -> tuple[int, int]:
+    def score(bus_num: int) -> float:
+        kv = _to_float(bus_by_num[bus_num].get("BusNomVolt"), 0.0)
+        return 2.0 * kv + gen_mw.get(bus_num, 0.0) - 0.35 * load_mw.get(bus_num, 0.0)
+
+    if score(to_bus_num) > score(from_bus_num):
+        return to_bus_num, from_bus_num
+    return from_bus_num, to_bus_num
+
+
+def _aux_branch_length_km(
+    row: dict[str, str],
+    from_bus: dict[str, str],
+    to_bus: dict[str, str],
+    coords_by_sub: dict[int, tuple[float, float]],
+) -> float:
+    powerworld_length = _to_float(row.get("LineLength"), 0.0)
+    if powerworld_length > 0:
+        return max(0.5, powerworld_length * 1.609344)
+
+    from_coord = _aux_bus_coordinate(from_bus, coords_by_sub)
+    to_coord = _aux_bus_coordinate(to_bus, coords_by_sub)
+    if from_coord and to_coord:
+        return max(0.5, _haversine_km(from_coord[0], from_coord[1], to_coord[0], to_coord[1]))
+    return 2.0
+
+
+def _aux_bus_coordinate(row: dict[str, str], coords_by_sub: dict[int, tuple[float, float]]) -> tuple[float, float] | None:
+    lat = _to_float(row.get("Latitude"))
+    lon = _to_float(row.get("Longitude"))
+    if math.isfinite(lat) and math.isfinite(lon):
+        return lat, lon
+    return coords_by_sub.get(_to_int(row.get("SubNum")))
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    radius_km = 6371.0088
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2.0) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2.0) ** 2
+    return 2.0 * radius_km * math.asin(math.sqrt(min(1.0, a)))
+
+
+def _bounded_impedance(value: float, low: float, high: float, default: float) -> float:
+    if not math.isfinite(value) or value <= 0.0:
+        return default
+    return min(high, max(low, value))
+
+
+def _greenfield_current_floor_kA(voltage_kv: float) -> float:
+    if voltage_kv >= 200.0:
+        return 3.2
+    if voltage_kv >= 100.0:
+        return 4.6
+    return 3.5
+
+
+def _aux_bus_label(bus_num: int, row: dict[str, str]) -> str:
+    name = str(row.get("BusName", "")).strip()
+    return f"{bus_num} {name}".strip()
 
 
 def solve_greenfield_corridor(

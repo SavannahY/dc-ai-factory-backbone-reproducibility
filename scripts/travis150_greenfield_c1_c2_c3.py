@@ -38,7 +38,7 @@ def parse_args() -> argparse.Namespace:
         "--travis-case",
         type=Path,
         default=None,
-        help="Optional downloaded Travis 150 electric case as MATPOWER .m or corridor CSV.",
+        help="Optional downloaded Travis 150 electric case as PowerWorld .aux, MATPOWER .m, or corridor CSV.",
     )
     parser.add_argument("--flagship-pocket", default=DEFAULT_FLAGSHIP_POCKET)
     parser.add_argument("--loads-mw", nargs="+", type=float, default=list(DEFAULT_LOADS_MW))
@@ -132,6 +132,16 @@ def _write_markdown(
     tbase = transfer[transfer["study_load_mw"] == 1000.0]
     top_corridor = tbase["pocket_id"].iloc[0] if not tbase.empty else transfer["pocket_id"].iloc[0]
     span = f"{transfer['source_bus'].iloc[0]} to {transfer['load_bus'].iloc[0]}"
+    if source.startswith("fallback"):
+        limitation_source_note = (
+            "This run used the archived Austin/Travis electrical corridor catalog already in the "
+            "repository because no external Travis electric case was supplied."
+        )
+    else:
+        limitation_source_note = (
+            "This run used the supplied Travis electric case for corridor siting and electrical "
+            "context, while the dynamic voltage result remains a HELICS-compatible proxy screen."
+        )
 
     lines = [
         "# Travis 150 Greenfield Data-Center Configuration Study",
@@ -158,6 +168,9 @@ def _write_markdown(
         "  AC/DC-terminal voltage support.",
         "- These are new-build data-center configurations, not conversions of an",
         "  existing AC line.",
+        "- For PowerWorld AUX inputs, existing Travis branch routes provide siting,",
+        "  voltage class and impedance context; transfer limits use new-build",
+        "  data-center corridor assumptions.",
         "",
         "## Base 1 GW Results",
         "",
@@ -186,10 +199,10 @@ def _write_markdown(
         "",
         "## Limitations",
         "",
-        "The fallback result uses the archived Austin/Travis electrical corridor",
-        "catalog already in the repository. A utility-grade result should rerun",
-        "the same script with the downloaded Travis 150 electric case and a",
-        "validated GridDyn dynamic model.",
+        limitation_source_note,
+        "A utility-grade result should rerun the same scenarios with a validated",
+        "Travis 150 GridDyn dynamic model and an OpenDSS feeder tied through",
+        "HELICS.",
         "",
     ]
     path.parent.mkdir(parents=True, exist_ok=True)

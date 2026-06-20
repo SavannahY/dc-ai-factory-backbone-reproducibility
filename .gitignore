@@ -20,3 +20,7 @@ __pycache__/
 *.toc
 *.zip
 *_SavedVoltages.dbl
+!Travis150/Travis150_Electric_Data.aux
+Travis150/*.pwb
+Travis150/*.pwd
+Travis150/*Gas*.xlsx
