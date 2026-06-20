@@ -56,6 +56,23 @@ This writes `data/travis150_dc_line_siting_candidates_v1.csv`,
 `docs/travis150_dc_line_siting_study.md`. The ranking is a synthetic
 bus-to-bus corridor screen, not a geospatial right-of-way route selection.
 
+To run the corrected greenfield Travis 150 data-center configuration study,
+where C1, C2 and C3 are all new systems built to serve incremental data-center
+load, run:
+
+```bash
+python scripts/travis150_greenfield_c1_c2_c3.py
+```
+
+This writes `data/travis150_greenfield_c1_c2_c3_transfer_v2.csv`,
+`data/travis150_greenfield_c1_c2_c3_harmonics_v2.csv`,
+`data/travis150_greenfield_c1_c2_c3_voltage_v2.csv`,
+`data/travis150_greenfield_c1_c2_c3_summary_v2.csv` and
+`docs/travis150_greenfield_data_center_config_study.md`. Pass
+`--travis-case path/to/downloaded/travis150-electric-case.m` when the TAMU
+electric case is available; otherwise the script uses the archived fallback
+Austin/Travis flagship corridor `B_04` to `B_101`.
+
 The HELICS GridDyn/OpenDSS protocol for a follow-on transmission-distribution
 dynamic VAR study is documented in `docs/helics_td_dynamic_var_study.md`. It is
 not part of the archived smoke-test command because it requires external
