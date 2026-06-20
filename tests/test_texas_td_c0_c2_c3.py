@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_dc_backbone.texas_td_scenarios import default_corridors, evaluate_scenario, run_hosting_capacity
+from ai_dc_backbone.travis150_siting import build_travis150_siting_table, summarize_travis150_siting
 
 
 def test_default_catalog_has_main_and_validation_datasets():
@@ -101,3 +102,21 @@ def test_voltage_outputs_include_large_electronic_load_ride_through_screen():
     assert a.loc["C3", "lel_vrt_pass_fraction"] >= a.loc["C2", "lel_vrt_pass_fraction"]
     assert a.loc["C3", "median_lel_current_max_pu"] < a.loc["C0", "median_lel_current_max_pu"]
     assert a.loc["C3", "median_lel_load_loss_max_mw"] < a.loc["C0", "median_lel_load_loss_max_mw"]
+
+
+def test_travis150_dc_line_siting_ranks_archived_validation_corridors():
+    ranking = build_travis150_siting_table(ROOT / "data")
+    summary = summarize_travis150_siting(ranking)
+
+    assert len(ranking) == 4
+    assert ranking["rank"].tolist() == [1, 2, 3, 4]
+    assert ranking.iloc[0]["pocket_id"] == "ATX-230-138-04"
+    assert ranking["three_benefits_met"].all()
+    assert (ranking["c3_transfer_gain_vs_c0_pct"] > 0.0).all()
+    assert (ranking["c3_thdv_reduction_vs_c0_pct"] > 90.0).all()
+    assert (ranking["c3_voltage_deviation_reduction_vs_c0_pct"] > 80.0).all()
+
+    row = summary.iloc[0]
+    assert row["top_ranked_pocket_id"] == "ATX-230-138-04"
+    assert row["all_three_benefits_count"] == 4
+    assert row["centralized_beats_local_transfer_count"] == 3

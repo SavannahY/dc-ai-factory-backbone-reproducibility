@@ -44,6 +44,18 @@ for this steady-state screening path. Distribution validation remains an OpenDSS
 selected-feeder path; the full Texas OpenDSS dataset is intentionally not pulled
 into the main transmission hosting-capacity loop.
 
+To rank the Austin/Travis 150-bus validation corridors for conversion to a DC
+line, run:
+
+```bash
+python scripts/travis150_dc_line_siting.py
+```
+
+This writes `data/travis150_dc_line_siting_candidates_v1.csv`,
+`data/travis150_dc_line_siting_summary_v1.csv` and
+`docs/travis150_dc_line_siting_study.md`. The ranking is a synthetic
+bus-to-bus corridor screen, not a geospatial right-of-way route selection.
+
 The HELICS GridDyn/OpenDSS protocol for a follow-on transmission-distribution
 dynamic VAR study is documented in `docs/helics_td_dynamic_var_study.md`. It is
 not part of the archived smoke-test command because it requires external

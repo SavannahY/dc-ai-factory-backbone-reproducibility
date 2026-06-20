@@ -66,6 +66,7 @@ redistributed through GitHub.
 | Fig. 4: dynamic voltage buffering | `figures/fig4_voltage_stabilization_averaged_emt_v3.{png,svg}` | `dynamic_timeseries_v3.csv`, `dynamic_metrics_v3.csv`, `dynamic_robustness_scenario_grid_v3.csv` |
 | Fig. 5: load-pocket and voltage-class envelope | `figures/fig5_case_study_voltage_envelope_v3.{png,svg}` | `cost_copper_envelope_v3.csv`, `assumption_provenance_table_v3.csv` |
 | Texas T&D C0/C1/C2/C3 add-on | `figures/texas_td_c0_c2_c3_summary_v1.{png,svg}` | `texas_td_c0_c2_c3_summary_v1.csv`, `texas_td_c0_c2_c3_hosting_capacity_v1.csv`, `texas_td_c0_c2_c3_harmonics_v1.csv`, `texas_td_c0_c2_c3_voltage_dynamics_v1.csv`, `texas_td_voltage_ride_through_sources_v1.csv` |
+| Austin/Travis 150-bus DC line siting | `docs/travis150_dc_line_siting_study.md` | `travis150_dc_line_siting_candidates_v1.csv`, `travis150_dc_line_siting_summary_v1.csv` |
 | Supplementary Figs. S1-S4 | `figures/supp_fig_s*_v3.{png,svg}` | fault-protection, EMT-validation, buffer-feasibility and cost/copper CSVs |
 | Supplementary Figs. S5-S6 | `figures/supp_fig_s5_*`, `figures/supp_fig_s6_*` | harmonic robustness grid CSVs |
 
@@ -124,6 +125,12 @@ Texas T&D C0/C1/C2/C3 architecture screen:
 
 ```bash
 python scripts/texas_td_c0_c2_c3_scenarios.py
+```
+
+Austin/Travis 150-bus DC line siting screen:
+
+```bash
+python scripts/travis150_dc_line_siting.py
 ```
 
 If the downloaded Texas7k MATPOWER case is available, pass it with
