@@ -3,17 +3,19 @@
 
 The executable path is intentionally explicit:
 
-1. Build a repeated-fault GridDyn dynamic case.
-2. Run GridDyn and parse the selected transmission POI voltage channel.
+1. Build a GridDyn dynamic case or a Travis-derived proxy case.
+2. Run GridDyn and obtain the transmission POI voltage channel or documented
+   proxy sag waveform.
 3. Exchange that voltage through HELICS with an OpenDSS distribution feeder and
    a dynamic VAR controller federate.
-4. Write per-time-step and summary results for baseline, local 34.5 kV VAR and
-   centralized 138 kV VAR support.
+4. Write per-time-step and summary results for C1, C2 and C3.
 
 If an IEEE 118-bus or Texas A&M 150-bus dynamic GridDyn case is available, pass
-it through ``--griddyn-case`` and ``--poi-voltage-field``. The default executable
-demo uses GridDyn's bundled IEEE 39 dynamic case because the repository does not
-ship an IEEE 118/Texas 150 dynamic-data package.
+it through ``--griddyn-case`` and ``--poi-voltage-field``. If only the Travis
+150 electric AUX case is available, pass ``--travis-case`` to generate a
+documented two-bus GridDyn proxy from the selected Travis corridor. If neither
+is supplied, the executable smoke test uses GridDyn's bundled IEEE 39 dynamic
+case.
 """
 
 from __future__ import annotations
@@ -45,13 +47,56 @@ except ModuleNotFoundError:
         (112.0, 0.37, 0.060),
     )
 
+try:
+    from ai_dc_backbone.travis150_greenfield import DEFAULT_FLAGSHIP_POCKET, load_travis_greenfield_corridors
+except ModuleNotFoundError:
+    DEFAULT_FLAGSHIP_POCKET = "ATX-230-138-04"
+    load_travis_greenfield_corridors = None  # type: ignore[assignment]
+
 
 DEFAULT_EVENT_CSV = ROOT / "cosim" / "griddyn_td_dynamic_var" / "eastern_interconnection_2024_voltage_sag_train.csv"
 DEFAULT_OUTPUT_DIR = ROOT / "cosim" / "griddyn_td_dynamic_var" / "results"
 DEFAULT_FEDERATION_PLAN = ROOT / "cosim" / "griddyn_td_dynamic_var" / "helics_federation_plan.json"
 DEFAULT_GRIDDYN_IEEE39_DIR = Path("/tmp/GridDyn/test/test_files/IEEE_test_cases")
 DEFAULT_POI_FIELD = "BUS_17:voltage"
-SCENARIOS = ("baseline", "local_34p5kv", "central_138kv")
+TRAVIS_PROXY_RECORDER_FIELD = "travis_poi:voltage"
+TRAVIS_PROXY_POI_FIELD = "travis_proxy_event_voltage"
+SCENARIO_PROFILES = {
+    "C1": {
+        "legacy_name": "baseline",
+        "architecture": "traditional_ac_480v",
+        "control_mode": "baseline",
+        "load_boundary": "480 V AC facility distribution",
+        "load_boundary_nominal_voltage_v": 480.0,
+        "dc_buffer": False,
+    },
+    "C2": {
+        "legacy_name": "local_34p5kv",
+        "architecture": "ac_corridor_sst_800vdc",
+        "control_mode": "local_34p5kv",
+        "load_boundary": "800 V DC SST output",
+        "load_boundary_nominal_voltage_v": 800.0,
+        "dc_buffer": False,
+    },
+    "C3": {
+        "legacy_name": "central_138kv",
+        "architecture": "bipolar_dc_corridor_800vdc",
+        "control_mode": "central_138kv",
+        "load_boundary": "800 V DC corridor output",
+        "load_boundary_nominal_voltage_v": 800.0,
+        "dc_buffer": True,
+    },
+}
+SCENARIO_ALIASES = {
+    "C1": "C1",
+    "C2": "C2",
+    "C3": "C3",
+    "baseline": "C1",
+    "local_34p5kv": "C2",
+    "central_138kv": "C3",
+}
+SCENARIOS = tuple(SCENARIO_PROFILES)
+SCENARIO_CHOICES = tuple(SCENARIO_ALIASES)
 
 
 def parse_args() -> argparse.Namespace:
@@ -67,8 +112,30 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Optional existing GridDyn dynamic case. If omitted, the script writes a repeated-fault "
-            "IEEE 39 GridDyn wrapper using --griddyn-ieee39-dir."
+            "Travis 150 proxy when --travis-case is supplied, otherwise an IEEE 39 GridDyn wrapper "
+            "using --griddyn-ieee39-dir."
         ),
+    )
+    parser.add_argument(
+        "--travis-case",
+        type=Path,
+        default=None,
+        help=(
+            "Optional Travis 150 electric case, normally Travis150_Electric_Data.aux. When supplied "
+            "without --griddyn-case, the runner writes a documented GridDyn-compatible two-bus "
+            "dynamic proxy using the selected Travis corridor."
+        ),
+    )
+    parser.add_argument(
+        "--flagship-pocket",
+        default=DEFAULT_FLAGSHIP_POCKET,
+        help="Fallback Travis corridor pocket to use if the supplied case is not a PowerWorld AUX case.",
+    )
+    parser.add_argument(
+        "--travis-proxy-load-mw",
+        type=float,
+        default=1000.0,
+        help="Incremental data-center load represented in the generated Travis GridDyn proxy.",
     )
     parser.add_argument(
         "--griddyn-ieee39-dir",
@@ -154,9 +221,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--scenarios",
         nargs="+",
-        choices=SCENARIOS,
+        choices=SCENARIO_CHOICES,
         default=list(SCENARIOS),
-        help="Scenarios to run through the HELICS/OpenDSS federation.",
+        help=(
+            "Scenarios to run through the HELICS/OpenDSS federation. C1/C2/C3 are preferred; "
+            "baseline/local_34p5kv/central_138kv remain accepted aliases."
+        ),
     )
     parser.add_argument(
         "--write-event-csv",
@@ -217,6 +287,17 @@ def load_optional_modules() -> tuple[object, object]:
     return helics, dss
 
 
+def canonical_scenario(scenario: str) -> str:
+    try:
+        return SCENARIO_ALIASES[scenario]
+    except KeyError as exc:
+        raise ValueError(f"Unknown scenario: {scenario}") from exc
+
+
+def scenario_profile(scenario: str) -> dict[str, object]:
+    return SCENARIO_PROFILES[canonical_scenario(scenario)]
+
+
 def default_time_stop() -> float:
     return max(start_s + duration_s for start_s, _voltage_pu, duration_s in EASTERN_INTERCONNECTION_2024_SAG_EVENTS) + 2.0
 
@@ -261,6 +342,92 @@ def write_default_griddyn_case(
         ]
     )
     path.write_text("\n".join(lines))
+
+
+def write_travis150_proxy_griddyn_case(
+    path: Path,
+    recorder_csv: Path,
+    travis_case: Path,
+    flagship_pocket: str,
+    load_mw: float,
+    fault_value: str,
+    recorder_period_s: float,
+) -> str:
+    if load_travis_greenfield_corridors is None:
+        raise RuntimeError("Travis 150 corridor importer is not available in this environment.")
+    corridors, source = load_travis_greenfield_corridors(travis_case, flagship_pocket)
+    corridor = corridors[0]
+    base_mva = max(1000.0, float(load_mw))
+    p_pu = float(load_mw) / base_mva
+    q_pu = 0.25 * p_pu
+    z_base_ohm = corridor.voltage_kv**2 / base_mva
+    r_pu = max(0.0001, corridor.r_ohm_km * corridor.length_km / z_base_ohm)
+    x_pu = max(0.001, corridor.x_ohm_km * corridor.length_km / z_base_ohm)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        '<?xml version="1.0" encoding="utf-8"?>',
+        '<griddyn name="travis150_greenfield_proxy" version="0.0.1">',
+        "  <!--",
+        "    Travis 150 dynamic proxy generated from the electric-side corridor screen.",
+        "    This is not the full TAMU Travis 150 dynamic model. The AUX case supplies",
+        "    corridor voltage, impedance, length and source/load labels. The",
+        "    event-inspired sag train is applied as the HELICS POI voltage series",
+        "    after GridDyn validates this executable proxy topology.",
+        f"    Source case: {travis_case}",
+        f"    Corridor source: {source}",
+        f"    Selected span: {corridor.source_bus} -> {corridor.load_bus}",
+        "  -->",
+        f"  <basepower>{base_mva:.6f}</basepower>",
+        '  <bus name="travis_source">',
+        "    <type>SLK</type>",
+        "    <angle>0</angle>",
+        "    <voltage>1.0</voltage>",
+        '    <generator name="grid_source">',
+        f"      <pmax>{max(1.8, 1.5 * p_pu):.6f}</pmax>",
+        "    </generator>",
+        "  </bus>",
+        '  <bus name="travis_poi">',
+        "    <type>PQ</type>",
+        "    <angle>0</angle>",
+        '    <load name="data_center_incremental_load">',
+        f"      <P>{p_pu:.8f}</P>",
+        f"      <Q>{q_pu:.8f}</Q>",
+        "    </load>",
+        "  </bus>",
+        '  <link from="travis_source" name="travis_source_to_poi" to="travis_poi">',
+        "    <b>0</b>",
+        f"    <r>{r_pu:.8f}</r>",
+        f"    <x>{x_pu:.8f}</x>",
+    ]
+    lines.extend(
+        [
+            "  </link>",
+            "  <timestart>0</timestart>",
+            f"  <timestop>{default_time_stop():.6f}</timestop>",
+            f'  <recorder field="auto" period="{recorder_period_s}">',
+            f"    <file>{recorder_csv}</file>",
+            "  </recorder>",
+            "</griddyn>",
+            "",
+        ]
+    )
+    path.write_text("\n".join(lines))
+    return source
+
+
+def event_inspired_voltage_series(period_s: float) -> list[tuple[float, float]]:
+    stop_s = default_time_stop()
+    steps = int(round(stop_s / period_s))
+    series = []
+    for idx in range(steps + 1):
+        t_s = round(idx * period_s, 10)
+        v_pu = 1.0
+        for start_s, sag_v_pu, duration_s in EASTERN_INTERCONNECTION_2024_SAG_EVENTS:
+            if start_s <= t_s <= start_s + duration_s:
+                v_pu = sag_v_pu
+                break
+        series.append((t_s, v_pu))
+    return series
 
 
 def read_grid_dyn_recorder(path: Path, voltage_field: str) -> list[tuple[float, float]]:
@@ -370,15 +537,28 @@ def controller_q_kvar(
     local_qmax_kvar: float,
     central_qmax_kvar: float,
 ) -> tuple[float, float]:
-    if scenario == "baseline":
+    control_mode = str(scenario_profile(scenario)["control_mode"])
+    if control_mode == "baseline":
         return 0.0, 0.0
     error = max(0.0, vref_pu - measured_voltage_pu)
     raw_q = error * droop_kvar_per_pu
-    if scenario == "local_34p5kv":
+    if control_mode == "local_34p5kv":
         return min(raw_q, local_qmax_kvar), 0.0
-    if scenario == "central_138kv":
+    if control_mode == "central_138kv":
         return 0.0, min(raw_q, central_qmax_kvar)
     raise ValueError(f"Unknown scenario: {scenario}")
+
+
+def load_boundary_voltage_pu(profile: dict[str, object], ac_voltage_pu: float) -> float:
+    if bool(profile["dc_buffer"]):
+        return 1.0
+    return ac_voltage_pu
+
+
+def load_served_fraction(profile: dict[str, object], ac_trip_flag: bool) -> float:
+    if bool(profile["dc_buffer"]):
+        return 1.0
+    return 0.0 if ac_trip_flag else 1.0
 
 
 def run_helics_opendss_scenario(
@@ -388,7 +568,10 @@ def run_helics_opendss_scenario(
     series: list[tuple[float, float]],
     args: argparse.Namespace,
 ) -> list[dict[str, float | bool | str]]:
-    broker_name = f"td_dynamic_var_{scenario}_{uuid.uuid4().hex[:8]}"
+    scenario_id = canonical_scenario(scenario)
+    profile = scenario_profile(scenario_id)
+    control_mode = str(profile["control_mode"])
+    broker_name = f"td_dynamic_var_{scenario_id}_{uuid.uuid4().hex[:8]}"
     broker = h.helicsCreateBroker("inproc", broker_name, "--federates=3 --loglevel=warning")
     if not h.helicsBrokerIsConnected(broker):
         raise RuntimeError("HELICS broker failed to start")
@@ -400,36 +583,36 @@ def run_helics_opendss_scenario(
         h.helicsFederateInfoSetTimeProperty(fedinfo, h.helics_property_time_delta, args.recorder_period_s)
         return h.helicsCreateValueFederate(name, fedinfo)
 
-    tx_fed = make_fed(f"{scenario}_GridDynTransmission")
-    dist_fed = make_fed(f"{scenario}_OpenDSSDistribution")
-    ctrl_fed = make_fed(f"{scenario}_DynamicVARController")
+    tx_fed = make_fed(f"{scenario_id}_GridDynTransmission")
+    dist_fed = make_fed(f"{scenario_id}_OpenDSSDistribution")
+    ctrl_fed = make_fed(f"{scenario_id}_DynamicVARController")
 
     tx_v_pub = h.helicsFederateRegisterGlobalPublication(
-        tx_fed, f"{scenario}/transmission/poi_voltage_pu", h.HELICS_DATA_TYPE_DOUBLE, "pu"
+        tx_fed, f"{scenario_id}/transmission/poi_voltage_pu", h.HELICS_DATA_TYPE_DOUBLE, "pu"
     )
-    tx_load_kw_sub = h.helicsFederateRegisterSubscription(tx_fed, f"{scenario}/distribution/load_kw", "kW")
+    tx_load_kw_sub = h.helicsFederateRegisterSubscription(tx_fed, f"{scenario_id}/distribution/load_kw", "kW")
 
-    dist_v_sub = h.helicsFederateRegisterSubscription(dist_fed, f"{scenario}/transmission/poi_voltage_pu", "pu")
-    dist_q_local_sub = h.helicsFederateRegisterSubscription(dist_fed, f"{scenario}/controller/local_q_kvar", "kvar")
-    dist_q_central_sub = h.helicsFederateRegisterSubscription(dist_fed, f"{scenario}/controller/central_q_kvar", "kvar")
+    dist_v_sub = h.helicsFederateRegisterSubscription(dist_fed, f"{scenario_id}/transmission/poi_voltage_pu", "pu")
+    dist_q_local_sub = h.helicsFederateRegisterSubscription(dist_fed, f"{scenario_id}/controller/local_q_kvar", "kvar")
+    dist_q_central_sub = h.helicsFederateRegisterSubscription(dist_fed, f"{scenario_id}/controller/central_q_kvar", "kvar")
     dist_v_pub = h.helicsFederateRegisterGlobalPublication(
-        dist_fed, f"{scenario}/distribution/datacenter_ac_voltage_pu", h.HELICS_DATA_TYPE_DOUBLE, "pu"
+        dist_fed, f"{scenario_id}/distribution/datacenter_ac_voltage_pu", h.HELICS_DATA_TYPE_DOUBLE, "pu"
     )
     dist_load_kw_pub = h.helicsFederateRegisterGlobalPublication(
-        dist_fed, f"{scenario}/distribution/load_kw", h.HELICS_DATA_TYPE_DOUBLE, "kW"
+        dist_fed, f"{scenario_id}/distribution/load_kw", h.HELICS_DATA_TYPE_DOUBLE, "kW"
     )
     dist_load_kvar_pub = h.helicsFederateRegisterGlobalPublication(
-        dist_fed, f"{scenario}/distribution/load_kvar", h.HELICS_DATA_TYPE_DOUBLE, "kvar"
+        dist_fed, f"{scenario_id}/distribution/load_kvar", h.HELICS_DATA_TYPE_DOUBLE, "kvar"
     )
 
     ctrl_v_sub = h.helicsFederateRegisterSubscription(
-        ctrl_fed, f"{scenario}/distribution/datacenter_ac_voltage_pu", "pu"
+        ctrl_fed, f"{scenario_id}/distribution/datacenter_ac_voltage_pu", "pu"
     )
     ctrl_q_local_pub = h.helicsFederateRegisterGlobalPublication(
-        ctrl_fed, f"{scenario}/controller/local_q_kvar", h.HELICS_DATA_TYPE_DOUBLE, "kvar"
+        ctrl_fed, f"{scenario_id}/controller/local_q_kvar", h.HELICS_DATA_TYPE_DOUBLE, "kvar"
     )
     ctrl_q_central_pub = h.helicsFederateRegisterGlobalPublication(
-        ctrl_fed, f"{scenario}/controller/central_q_kvar", h.HELICS_DATA_TYPE_DOUBLE, "kvar"
+        ctrl_fed, f"{scenario_id}/controller/central_q_kvar", h.HELICS_DATA_TYPE_DOUBLE, "kvar"
     )
 
     h.helicsFederateEnterExecutingModeAsync(tx_fed)
@@ -475,12 +658,15 @@ def run_helics_opendss_scenario(
                 below_threshold_s += dt
             else:
                 below_threshold_s = 0.0
-            tripped = below_threshold_s >= args.trip_delay_s
+            ac_trip_flag = below_threshold_s >= args.trip_delay_s
+            tripped = False if bool(profile["dc_buffer"]) else ac_trip_flag
+            boundary_v = load_boundary_voltage_pu(profile, datacenter_v)
+            served_fraction = load_served_fraction(profile, tripped)
 
             if idx > 0:
                 controller_voltage = h.helicsInputGetDouble(ctrl_v_sub)
             local_q_kvar, central_q_kvar = controller_q_kvar(
-                scenario,
+                scenario_id,
                 controller_voltage,
                 args.var_vref_pu,
                 args.var_droop_kvar_per_pu,
@@ -491,7 +677,10 @@ def run_helics_opendss_scenario(
             tx_observed_load_kw = h.helicsInputGetDouble(tx_load_kw_sub) if idx > 1 else 0.0
             rows.append(
                 {
-                    "scenario": scenario,
+                    "scenario": scenario_id,
+                    "legacy_scenario": profile["legacy_name"],
+                    "architecture": profile["architecture"],
+                    "control_mode": control_mode,
                     "time_s": time_s,
                     "helics_time_transmission_s": float(granted_tx),
                     "helics_time_distribution_s": float(granted_dist),
@@ -500,12 +689,19 @@ def run_helics_opendss_scenario(
                     "helics_poi_voltage_pu": poi_v,
                     "datacenter_ac_voltage_pu": datacenter_v,
                     "mv_bus_voltage_pu": float(solved["mv_bus_voltage_pu"]),
+                    "load_boundary": profile["load_boundary"],
+                    "load_boundary_nominal_voltage_v": float(profile["load_boundary_nominal_voltage_v"]),
+                    "load_boundary_voltage_pu": boundary_v,
+                    "dc_buffer_enabled": bool(profile["dc_buffer"]),
                     "local_q_kvar": q_local_rx,
                     "central_q_kvar": q_central_rx,
                     "load_kw": load_kw,
+                    "served_load_kw": load_kw * served_fraction,
+                    "load_served_fraction": served_fraction,
                     "load_kvar": load_kvar,
                     "tx_observed_load_kw": tx_observed_load_kw,
                     "below_trip_threshold_s": below_threshold_s,
+                    "ac_voltage_trip_flag": ac_trip_flag,
                     "trip_flag": tripped,
                     "opendss_converged": bool(solved["opendss_converged"]),
                 }
@@ -539,18 +735,28 @@ def summarize_rows(rows: list[dict[str, float | bool | str]]) -> list[dict[str, 
     summary: list[dict[str, float | bool | str]] = []
     for scenario, scenario_rows in by_scenario.items():
         min_row = min(scenario_rows, key=lambda r: float(r["datacenter_ac_voltage_pu"]))
+        boundary_min_row = min(scenario_rows, key=lambda r: float(r["load_boundary_voltage_pu"]))
         poi_min_row = min(scenario_rows, key=lambda r: float(r["griddyn_poi_voltage_pu"]))
         summary.append(
             {
                 "scenario": scenario,
+                "legacy_scenario": str(scenario_rows[0]["legacy_scenario"]),
+                "architecture": str(scenario_rows[0]["architecture"]),
+                "control_mode": str(scenario_rows[0]["control_mode"]),
                 "samples": len(scenario_rows),
                 "poi_min_voltage_pu": float(poi_min_row["griddyn_poi_voltage_pu"]),
                 "poi_min_time_s": float(poi_min_row["time_s"]),
                 "datacenter_min_ac_voltage_pu": float(min_row["datacenter_ac_voltage_pu"]),
                 "datacenter_min_ac_time_s": float(min_row["time_s"]),
+                "load_boundary": str(scenario_rows[0]["load_boundary"]),
+                "load_boundary_nominal_voltage_v": float(scenario_rows[0]["load_boundary_nominal_voltage_v"]),
+                "load_boundary_min_voltage_pu": float(boundary_min_row["load_boundary_voltage_pu"]),
+                "load_boundary_min_time_s": float(boundary_min_row["time_s"]),
+                "min_load_served_fraction": min(float(r["load_served_fraction"]) for r in scenario_rows),
                 "max_local_q_kvar": max(float(r["local_q_kvar"]) for r in scenario_rows),
                 "max_central_q_kvar": max(float(r["central_q_kvar"]) for r in scenario_rows),
-                "tripped_on_ac_voltage": any(bool(r["trip_flag"]) for r in scenario_rows),
+                "ac_voltage_trip_flag": any(bool(r["ac_voltage_trip_flag"]) for r in scenario_rows),
+                "data_center_tripped": any(bool(r["trip_flag"]) for r in scenario_rows),
                 "all_opendss_solves_converged": all(bool(r["opendss_converged"]) for r in scenario_rows),
             }
         )
@@ -562,31 +768,42 @@ def write_summary(path: Path, summary: list[dict[str, float | bool | str]]) -> N
 
 
 def build_plan(args: argparse.Namespace, griddyn_path: str | None, recorder_csv: Path, case_path: Path) -> dict[str, object]:
+    if args.griddyn_case is None and args.travis_case is not None:
+        case_origin = "travis150_dynamic_proxy"
+    elif args.griddyn_case is None:
+        case_origin = "ieee39_smoke_fallback"
+    else:
+        case_origin = "user_supplied_griddyn_case"
     return {
         "transmission_backend": "GridDyn",
         "distribution_backend": "OpenDSSDirect.py",
         "federation_layer": "HELICS",
         "griddyn_executable": griddyn_path,
+        "griddyn_case_origin": case_origin,
         "griddyn_case": str(case_path),
+        "travis_case": str(args.travis_case) if args.travis_case else None,
         "griddyn_recorder_csv": str(recorder_csv),
         "poi_voltage_field": args.poi_voltage_field,
+        "travis_proxy_recorder_field": TRAVIS_PROXY_RECORDER_FIELD if args.travis_case else None,
         "event_csv": str(args.event_csv),
         "federation_plan": str(args.federation_plan),
         "output_dir": str(args.output_dir),
-        "scenarios": args.scenarios,
+        "scenarios": [canonical_scenario(scenario) for scenario in args.scenarios],
+        "scenario_aliases": SCENARIO_ALIASES,
         "executed": False,
         "note": (
-            "Default case uses GridDyn's IEEE 39 dynamic event data. Pass --griddyn-case for an IEEE 118 "
-            "or Texas A&M 150-bus dynamic GridDyn case when available."
+            "When --travis-case is supplied, the script generates a Travis-derived GridDyn dynamic proxy "
+            "and labels the three data-center configurations as C1/C2/C3. Pass --griddyn-case for a full "
+            "IEEE 118 or Texas A&M 150-bus dynamic GridDyn case when available."
         ),
     }
 
 
-def run_griddyn(griddyn_path: str, case_path: Path, ieee39_dir: Path) -> subprocess.CompletedProcess[str]:
+def run_griddyn(griddyn_path: str, case_path: Path, search_dir: Path) -> subprocess.CompletedProcess[str]:
     # Avoid Anaconda's old ld in PATH when GridDyn was built with Homebrew GCC on macOS.
     env = os.environ.copy()
     env["PATH"] = "/usr/bin:/bin:/opt/homebrew/bin:/opt/homebrew/sbin"
-    command = [griddyn_path, str(case_path), "--summary", "--dir", str(ieee39_dir)]
+    command = [griddyn_path, str(case_path), "--summary", "--dir", str(search_dir)]
     return subprocess.run(command, check=False, text=True, capture_output=True, env=env)
 
 
@@ -597,8 +814,21 @@ def main() -> int:
         write_event_csv(args.event_csv)
 
     griddyn_path = resolve_executable(args.griddyn_exe)
-    recorder_csv = args.griddyn_recorder_csv or (args.output_dir / "griddyn_ieee39_repeated_fault_recorder.csv")
-    case_path = args.griddyn_case or (args.output_dir / "griddyn_ieee39_repeated_fault_case.xml")
+    use_travis_proxy = args.griddyn_case is None and args.travis_case is not None
+    if use_travis_proxy and args.poi_voltage_field == DEFAULT_POI_FIELD:
+        args.poi_voltage_field = TRAVIS_PROXY_POI_FIELD
+    if args.griddyn_recorder_csv is not None:
+        recorder_csv = args.griddyn_recorder_csv
+    elif use_travis_proxy:
+        recorder_csv = args.output_dir / "griddyn_travis150_proxy_recorder.csv"
+    else:
+        recorder_csv = args.output_dir / "griddyn_ieee39_repeated_fault_recorder.csv"
+    if args.griddyn_case is not None:
+        case_path = args.griddyn_case
+    elif use_travis_proxy:
+        case_path = args.output_dir / "griddyn_travis150_proxy_case.xml"
+    else:
+        case_path = args.output_dir / "griddyn_ieee39_repeated_fault_case.xml"
     plan = build_plan(args, griddyn_path, recorder_csv, case_path)
 
     if args.check_only or not args.execute:
@@ -606,7 +836,10 @@ def main() -> int:
         if args.check_only:
             if griddyn_path is None:
                 print("GridDyn executable was not found; build GridDyn or pass --griddyn-exe.", file=sys.stderr)
-            if args.griddyn_case is None:
+            if use_travis_proxy:
+                if args.travis_case is None or not args.travis_case.exists():
+                    print(f"Travis case does not exist: {args.travis_case}", file=sys.stderr)
+            elif args.griddyn_case is None:
                 raw = args.griddyn_ieee39_dir / "IEEE39.raw"
                 dyr = args.griddyn_ieee39_dir / "IEEE39.dyr"
                 if not raw.exists() or not dyr.exists():
@@ -629,7 +862,23 @@ def main() -> int:
         return 2
 
     if not args.skip_griddyn:
-        if args.griddyn_case is None:
+        search_dir = args.griddyn_ieee39_dir
+        if use_travis_proxy:
+            if args.travis_case is None or not args.travis_case.exists():
+                print(f"Travis case does not exist: {args.travis_case}", file=sys.stderr)
+                return 2
+            travis_source = write_travis150_proxy_griddyn_case(
+                case_path,
+                recorder_csv,
+                args.travis_case,
+                args.flagship_pocket,
+                args.travis_proxy_load_mw,
+                args.fault_value,
+                args.recorder_period_s,
+            )
+            plan["travis_proxy_source"] = travis_source
+            search_dir = case_path.parent
+        elif args.griddyn_case is None:
             raw = args.griddyn_ieee39_dir / "IEEE39.raw"
             dyr = args.griddyn_ieee39_dir / "IEEE39.dyr"
             if not raw.exists() or not dyr.exists():
@@ -647,14 +896,19 @@ def main() -> int:
             print(f"GridDyn case does not exist: {case_path}", file=sys.stderr)
             return 2
 
-        completed = run_griddyn(str(griddyn_path), case_path, args.griddyn_ieee39_dir)
+        completed = run_griddyn(str(griddyn_path), case_path, search_dir)
         (args.output_dir / "griddyn_stdout.log").write_text(completed.stdout)
         (args.output_dir / "griddyn_stderr.log").write_text(completed.stderr)
         if completed.returncode != 0:
             print(f"GridDyn failed with exit code {completed.returncode}. See {args.output_dir}", file=sys.stderr)
             return completed.returncode
 
-    series = read_grid_dyn_recorder(recorder_csv, args.poi_voltage_field)
+    if use_travis_proxy:
+        read_grid_dyn_recorder(recorder_csv, TRAVIS_PROXY_RECORDER_FIELD)
+        series = event_inspired_voltage_series(args.recorder_period_s)
+        plan["travis_proxy_voltage_source"] = str(args.event_csv)
+    else:
+        series = read_grid_dyn_recorder(recorder_csv, args.poi_voltage_field)
     write_poi_series(args.output_dir / "griddyn_poi_voltage_timeseries.csv", series, args.poi_voltage_field)
 
     all_rows: list[dict[str, float | bool | str]] = []

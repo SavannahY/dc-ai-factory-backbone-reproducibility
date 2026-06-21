@@ -65,6 +65,7 @@ redistributed through GitHub.
 | Fig. 3: harmonic ownership and OpenDSS screening | `figures/fig3_harmonic_ownership_opendss_screening_v3.{png,svg}` | `harmonic_thdv_monte_carlo_v3.csv`, `harmonic_individual_p95_v3.csv`, `true_opendss_harmonic_thdv_monte_carlo_v3.csv` |
 | Fig. 4: dynamic voltage buffering | `figures/fig4_voltage_stabilization_averaged_emt_v3.{png,svg}` | `dynamic_timeseries_v3.csv`, `dynamic_metrics_v3.csv`, `dynamic_robustness_scenario_grid_v3.csv` |
 | Fig. 5: load-pocket and voltage-class envelope | `figures/fig5_case_study_voltage_envelope_v3.{png,svg}` | `cost_copper_envelope_v3.csv`, `assumption_provenance_table_v3.csv` |
+| Fig. 6: Travis 150 greenfield C1/C2/C3 benefits | `figures/fig6_travis150_greenfield_benefits_v2.{png,svg,pdf}` | `travis150_greenfield_c1_c2_c3_summary_v2.csv`, `helics_opendss_dynamic_var_summary.csv`, `eastern_interconnection_2024_voltage_sag_train.csv` |
 | Texas T&D C0/C1/C2/C3 add-on | `figures/texas_td_c0_c2_c3_summary_v1.{png,svg}` | `texas_td_c0_c2_c3_summary_v1.csv`, `texas_td_c0_c2_c3_hosting_capacity_v1.csv`, `texas_td_c0_c2_c3_harmonics_v1.csv`, `texas_td_c0_c2_c3_voltage_dynamics_v1.csv`, `texas_td_voltage_ride_through_sources_v1.csv` |
 | Austin/Travis legacy DC line conversion siting | `docs/travis150_dc_line_siting_study.md` | `travis150_dc_line_siting_candidates_v1.csv`, `travis150_dc_line_siting_summary_v1.csv` |
 | Austin/Travis greenfield data-center configurations | `docs/travis150_greenfield_data_center_config_study.md` | `travis150_greenfield_c1_c2_c3_transfer_v2.csv`, `travis150_greenfield_c1_c2_c3_harmonics_v2.csv`, `travis150_greenfield_c1_c2_c3_voltage_v2.csv`, `travis150_greenfield_c1_c2_c3_summary_v2.csv` |
@@ -158,16 +159,19 @@ GridDyn-backed voltage-dip study:
 ```bash
 python scripts/run_griddyn_td_dynamic_var.py \
   --griddyn-exe /path/to/gridDynMain \
+  --travis-case Travis150/Travis150_Electric_Data.aux \
   --execute
 ```
 
-By default this writes and runs a repeated-fault IEEE 39 GridDyn dynamic case,
-then passes the selected GridDyn POI voltage into OpenDSS through HELICS. Pass
-`--griddyn-case` and `--poi-voltage-field` when an IEEE 118-bus or Texas A&M
-150-bus dynamic GridDyn case is available. The stored local result found that
-the 34.5 kV and 138 kV VAR cases improved the minimum OpenDSS AC voltage only
-from 0.313 pu to 0.322 pu, so the AC-side trip flag still asserted for this
-severe repeated-fault event.
+With `--travis-case`, this writes and runs a Travis-derived GridDyn proxy from
+the selected electric corridor, then passes the event-inspired POI voltage into
+OpenDSS through HELICS for C1 traditional AC, C2 local SST VAR support and C3
+centralized DC-corridor support cases. Pass `--griddyn-case` and
+`--poi-voltage-field` when a full IEEE 118-bus or Texas A&M 150-bus dynamic
+GridDyn case is available. The stored Travis-proxy result uses a 0.250 pu
+minimum HELICS POI voltage. C1 and C2 trip under this severe event; C3 still
+sees a low OpenDSS AC-side voltage, but the modeled DC buffer holds the 800 VDC
+load boundary and the data center remains served.
 
 Optional OpenDSS check:
 

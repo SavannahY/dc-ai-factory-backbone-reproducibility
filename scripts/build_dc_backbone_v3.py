@@ -22,6 +22,7 @@ ROOT = Path(os.environ.get(
     'DC_BACKBONE_BUILD_DIR',
     Path(__file__).resolve().parents[1] / 'submission_package',
 ))
+SOURCE_ROOT = Path(os.environ.get('DC_BACKBONE_SOURCE_ROOT', Path(__file__).resolve().parents[1]))
 if ROOT.exists():
     shutil.rmtree(ROOT)
 FIG = ROOT/'figures'; DATA = ROOT/'data'; CODE=ROOT/'code'; RENDER=ROOT/'rendered'; OPENDSS=ROOT/'opendss'; SUPP=ROOT/'supplementary'; REPO=ROOT/'public_code_repo'
@@ -861,6 +862,123 @@ def figure5():
     fig.tight_layout(); savefig(fig,'fig5_case_study_voltage_envelope_v3')
 figure5()
 
+def load_travis_greenfield_outputs():
+    """Copy Travis 150 greenfield and T&D co-simulation outputs into package."""
+    source_data = SOURCE_ROOT/'data'
+    source_cosim = SOURCE_ROOT/'cosim'/'griddyn_td_dynamic_var'
+    tables = {}
+    for key, filename in {
+        'transfer': 'travis150_greenfield_c1_c2_c3_transfer_v2.csv',
+        'harmonics': 'travis150_greenfield_c1_c2_c3_harmonics_v2.csv',
+        'voltage': 'travis150_greenfield_c1_c2_c3_voltage_v2.csv',
+        'summary': 'travis150_greenfield_c1_c2_c3_summary_v2.csv',
+    }.items():
+        src = source_data/filename
+        dst = DATA/filename
+        if src.exists():
+            shutil.copy(src, dst)
+        if dst.exists():
+            tables[key] = pd.read_csv(dst)
+
+    cosim_results = source_cosim/'results'
+    for filename in [
+        'helics_opendss_dynamic_var_summary.csv',
+        'helics_opendss_dynamic_var_timeseries.csv',
+        'griddyn_poi_voltage_timeseries.csv',
+        'griddyn_travis150_proxy_recorder.csv',
+        'griddyn_travis150_proxy_case.xml',
+        'run_manifest.json',
+    ]:
+        src = cosim_results/filename
+        dst = DATA/filename
+        if src.exists():
+            shutil.copy(src, dst)
+    sag_src = source_cosim/'eastern_interconnection_2024_voltage_sag_train.csv'
+    if sag_src.exists():
+        shutil.copy(sag_src, DATA/sag_src.name)
+    cosim_summary = DATA/'helics_opendss_dynamic_var_summary.csv'
+    if cosim_summary.exists():
+        tables['cosim_summary'] = pd.read_csv(cosim_summary)
+    return tables
+
+travis_tables = load_travis_greenfield_outputs()
+
+def figure6():
+    summary = travis_tables.get('summary')
+    if summary is None or summary.empty:
+        return
+    cosim_summary = travis_tables.get('cosim_summary')
+    order = ['C1', 'C2', 'C3']
+    labels = {
+        'C1': 'C1\nAC to 480 V',
+        'C2': 'C2\nAC + SST',
+        'C3': 'C3\nDC corridor',
+    }
+    colors = {'C1': '#377eb8', 'C2': '#984ea3', 'C3': '#e6550d'}
+    s = summary.set_index('scenario_id').loc[order]
+
+    fig, axes = plt.subplots(1, 3, figsize=(12.2, 4.0), gridspec_kw={'wspace': 0.34})
+    fig.subplots_adjust(left=0.06, right=0.985, bottom=0.27, top=0.84)
+
+    ax = axes[0]
+    transfer_gw = s['max_transfer_mw']/1000.0
+    ax.bar(np.arange(3), transfer_gw, color=[colors[k] for k in order], width=0.62)
+    ax.axhline(1.0, color='0.35', lw=1.0, ls='--')
+    for i, k in enumerate(order):
+        ax.text(i, transfer_gw.loc[k] + 0.035, f'{transfer_gw.loc[k]:.2f} GW', ha='center', fontsize=8)
+    c3_gain = (s.loc['C3', 'max_transfer_mw']/s.loc['C1', 'max_transfer_mw'] - 1.0)*100.0
+    ax.text(1.98, 0.20, f'C3 +{c3_gain:.1f}%\nvs C1', ha='center', va='bottom', fontsize=8, color=colors['C3'])
+    ax.set_xticks(np.arange(3)); ax.set_xticklabels([labels[k] for k in order], fontsize=8)
+    ax.set_ylabel('Useful transfer limit (GW)')
+    ax.set_ylim(0, 1.62)
+    ax.set_title('a  Benefit 1: transfer capacity', loc='left', fontsize=10.5, weight='bold')
+    ax.grid(axis='y', alpha=0.25)
+
+    ax = axes[1]
+    thd = s['thdv_p95_pct']
+    ax.bar(np.arange(3), thd, color=[colors[k] for k in order], width=0.62)
+    for i, k in enumerate(order):
+        ax.text(i, thd.loc[k] + 0.055, f'{thd.loc[k]:.2f}%', ha='center', fontsize=8)
+        source_label = f'{int(s.loc[k, "harmonic_source_count"])} AC-facing\nsource(s)'
+        if thd.loc[k] > 0.20:
+            ax.text(i, max(0.08, thd.loc[k]*0.12), source_label, ha='center', va='bottom', fontsize=6.7, color='white')
+        else:
+            ax.text(i, thd.loc[k] + 0.22, source_label, ha='center', va='bottom', fontsize=6.7, color=colors[k])
+    ax.set_xticks(np.arange(3)); ax.set_xticklabels([labels[k] for k in order], fontsize=8)
+    ax.set_ylabel('p95 THDv at 1 GW (%)')
+    ax.set_ylim(0, max(thd)*1.28)
+    ax.set_title('b  Benefit 2: harmonic ownership', loc='left', fontsize=10.5, weight='bold')
+    ax.grid(axis='y', alpha=0.25)
+
+    ax = axes[2]
+    if cosim_summary is not None and not cosim_summary.empty:
+        c = cosim_summary.set_index('scenario').loc[order]
+        boundary = c['load_boundary_min_voltage_pu']
+        served = c['min_load_served_fraction']
+        trip = c['data_center_tripped']
+        source_label = 'GridDyn/HELICS/OpenDSS proxy'
+    else:
+        boundary = s['data_center_load_served_min_fraction']*0.0 + s['p95_pcc_voltage_deviation_pct']
+        served = s['data_center_load_served_min_fraction']
+        trip = s['data_center_tripped']
+        source_label = 'Travis 150 proxy screen'
+    ax.bar(np.arange(3), boundary, color=[colors[k] for k in order], width=0.62, alpha=0.92)
+    ax.plot(np.arange(3), served, color='0.15', marker='D', ms=5.5, lw=1.2, label='load served fraction')
+    ax.axhline(0.90, color='0.35', lw=1.0, ls='--')
+    for i, k in enumerate(order):
+        flag = 'trip' if bool(trip.loc[k]) else 'served'
+        ax.text(i, min(boundary.loc[k] + 0.055, 1.08), f'{boundary.loc[k]:.2f} pu\n{flag}', ha='center', fontsize=8)
+    ax.set_xticks(np.arange(3)); ax.set_xticklabels([labels[k] for k in order], fontsize=8)
+    ax.set_ylabel('Boundary voltage / served fraction')
+    ax.set_ylim(0, 1.16)
+    ax.set_title('c  Benefit 3: voltage ride-through', loc='left', fontsize=10.5, weight='bold')
+    ax.text(0.00, -0.24, source_label + '; event-inspired sag, not reconstruction', transform=ax.transAxes, fontsize=6.6, color='0.35', va='top')
+    ax.legend(fontsize=6.8, frameon=False, loc='lower right')
+    ax.grid(axis='y', alpha=0.25)
+
+    savefig(fig, 'fig6_travis150_greenfield_benefits_v2')
+figure6()
+
 # Supplementary figures: S1 protection dynamics, S2 EMT validation, S3 buffer feasibility, S4 economics/copper
 def figure_s1():
     fig,axes=plt.subplots(1,3,figsize=(12,3.8))
@@ -962,7 +1080,7 @@ def figure_s4():
 figure_s4()
 
 # ---------------------------- Manuscript text ----------------------------
-abstract = """AI factories are becoming synchronized, DC-native, gigawatt-scale loads, while surrounding grids still treat them as passive AC buildings. This mismatch raises a planning question: if the useful electrical boundary is 800 VDC, where should the AC/DC boundary sit? We compare traditional AC delivery, AC corridors with local solid-state transformers and a utility-operated subtransmission DC backbone feeding 34.5 kV DC distribution and 800 VDC interfaces. In a 1 GW, 20 km, three-campus reference case, the DC backbone delivers 97.49% end-to-end efficiency to the 800 VDC boundary, compared with 96.23% for traditional AC and 97.42% for local SSTs. Efficiency alone is not the main result. Moving the boundary upstream also centralizes AC harmonic ownership and buffers synchronized training dynamics, reducing the 95th-percentile harmonic-voltage screening metric from 3.95% to 0.78% and reducing 0.1-20 Hz grid-side spectral energy to 5.9% of the AC baseline. Sensitivity analyses, direct OpenDSS harmonic solves, averaged EMT-style dynamics, protection screening and a reproducibility package support a falsifiable systems claim: for clustered AI factories, the AC/DC boundary is a subtransmission planning variable rather than only a building-level design choice."""
+abstract = """AI factories are becoming synchronized, DC-native, gigawatt-scale loads, while grids still treat them as passive AC buildings. We ask where the AC/DC boundary should sit when the useful facility boundary is 800 VDC. We compare traditional AC delivery, AC corridors with local solid-state transformers (SSTs) and a utility-operated subtransmission DC backbone feeding 34.5 kV DC distribution and 800 VDC interfaces. In a 1 GW, 20 km reference case, the DC backbone delivers 97.49% end-to-end efficiency, compared with 96.23% for traditional AC and 97.42% for local SSTs. A Travis 150 greenfield data-center case gives 1.44 GW useful transfer for the DC corridor, versus 1.17 GW for traditional AC, while reducing p95 THDv from 1.67% to 0.08%. In an event-inspired GridDyn/HELICS/OpenDSS voltage-sag proxy with a 0.25 pu transmission POI minimum, traditional AC and local-SST cases trip, whereas the DC-corridor boundary remains served. These results support a falsifiable systems claim: for clustered AI factories, the AC/DC boundary is a subtransmission planning variable rather than only a building-level design choice."""
 
 intro = """AI factories change the electrical problem that grids must solve. A conventional data center can often be approximated in planning studies as a large but mostly passive load. A modern AI factory is a synchronized computing machine. Training iterations, all-reduce communication, checkpointing and accelerator power-management events can appear electrically as coherent power modulation across thousands of GPUs. At the scale of multiple campuses connected to the same grid pocket, power delivery becomes part of the computing architecture.
 
@@ -997,11 +1115,18 @@ Across a 3,072-case dynamic robustness grid spanning campus count, cluster load,
 The voltage metrics in Fig. 4 are averaged EMT proxies. They are designed to compare architecture-level exposure, not to replace detailed EMT studies. We therefore include state equations, transfer-function validation and time-step convergence in the Supplementary Information. The result is that the DC backbone is not only an energy-delivery architecture; it is a dynamic electrical buffer between synchronized GPU computation and the AC grid."""),
 ("Data-center load pockets are becoming planning objects", """The proposed architecture is motivated by load pockets that are large, concentrated and data-center driven. Public planning documents for the San Jose area show a load pocket growing from approximately 2.1 GW in an earlier study case to 3.4 GW in a later base case and 4.2 GW in a sensitivity case (Fig. 5a) [9-12]. This paper does not claim that a specific planned HVDC project is a 138 kV DC AI-factory backbone. The point is that data-center-driven load pockets are already large enough to motivate controllable transmission solutions.
 
-The voltage-class envelope in Fig. 5b shows why the paper uses +/-138 kV only as a representative subtransmission design point. At 1 GW, +/-138 kV corresponds to approximately 3.6 kA bipole current. Higher multi-GW corridors move naturally toward higher voltage classes such as +/-320 kV. The relevant design variable is therefore not one fixed voltage, but the relocation of the AC/DC boundary to a voltage class compatible with load, distance, current limit, insulation and protection requirements.""")]
+The voltage-class envelope in Fig. 5b shows why the paper uses +/-138 kV only as a representative subtransmission design point. At 1 GW, +/-138 kV corresponds to approximately 3.6 kA bipole current. Higher multi-GW corridors move naturally toward higher voltage classes such as +/-320 kV. The relevant design variable is therefore not one fixed voltage, but the relocation of the AC/DC boundary to a voltage class compatible with load, distance, current limit, insulation and protection requirements."""),
+("Travis 150 greenfield configurations preserve the three-benefit ordering", """We next use the TAMU Travis 150 synthetic electric case as a Texas load-pocket test bed (Fig. 6). TAMU describes the case as a 150-bus synthetic electric system corresponding to the Austin-Travis County T&D system and states that it is synthetic, not an actual grid [24]. We ignore the companion gas network. ERCOT long-term planning materials are used only as regional motivation for large-load growth and transmission-planning context, not as routing data [25].
+
+The Travis study adds new data-center supply systems rather than converting existing AC lines. C1 is a new traditional AC data-center supply ending at 480 V AC facility distribution. C2 keeps a new AC corridor but places an SST at the data-center side, with local dynamic VAR support on the 34.5 kV AC side and an 800 VDC data-center boundary. C3 builds a new dedicated bipolar DC corridor with a centralized grid-facing AC/DC terminal and DC/DC conversion near the campus. At the 1 GW data-center load, the useful transfer limit is 1.17 GW for C1, 1.24 GW for C2 and 1.44 GW for C3, giving C3 a 22.8% transfer increase relative to C1 and 16.7% relative to C2. The 95th-percentile THDv screen follows the same ordering: 1.67% for C1, 0.53% for C2 and 0.08% for C3.
+
+For voltage ride-through, we couple a Travis-derived GridDyn-compatible proxy to an OpenDSS data-center feeder through HELICS and apply an event-inspired repeated sag waveform. This is not a reconstruction of the 10 July 2024 Eastern Interconnection event. In the installed-tool proxy, the transmission POI reaches 0.25 pu. C1 and C2 trip under this severe disturbance; the C2 local VAR controller reaches its reactive-power limit but cannot prevent the 800 VDC boundary from collapsing in this run. C3 keeps the 800 VDC data-center boundary served because the AC disturbance is absorbed at the centralized terminal and DC buffer layer. The result supports the architectural conclusion and also exposes the main local-control risk: local VAR devices can interact with utility LTCs, voltage regulators, capacitor banks, smart inverters or centralized STATCOM/SVC controls unless supervised coordination is added.""")]
 
 discussion = """Our results do not imply that every data center should be served by DC subtransmission, or that +/-138 kV is a universal optimum. They show that once AI factories become clustered, synchronized and DC-native, the location of the AC/DC boundary becomes a planning variable. This creates a new design space for utility-operated DC load pockets, where conversion efficiency, harmonic ownership and dynamic buffering are optimized together.
 
 The comparison also shows why efficiency alone is an incomplete criterion. A high-efficiency local-SST sensitivity case can approach or exceed the DC backbone in pure efficiency, but it does not change the architecture. Local SSTs retain multiple AC-facing grid interfaces and do not automatically provide a shared DC layer for buffering synchronized multi-campus load dynamics. The proposed backbone is valuable because the three benefits are co-located at one controllable boundary.
+
+The Travis 150 result strengthens this conclusion only as a reproducible test-bed result. It is not a site-selection claim, a real Austin routing study or a reconstruction of an operational disturbance. Its value is that the same C1-C2-C3 ordering appears when the architectures are implemented as new data-center supply systems on a synthetic Austin-Travis electric case and then stressed through an installed GridDyn/HELICS/OpenDSS voltage-sag workflow. The result also clarifies the disadvantage of the local approach. A local SST VAR controller can improve a static screen, but in a severe sag it may saturate; without supervisory coordination it may also fight nearby smart inverters, substation load-tap changers, capacitor banks, line regulators or centralized STATCOM/SVC controls on different time scales.
 
 Several technical risks remain. DC protection, pole-to-ground fault detection, hybrid DC breakers, grounding, insulation coordination, converter interoperability and electromagnetic-transient stability must be demonstrated before deployment. These risks are the same DC-grid feasibility, protection and converter-interoperability questions identified in HVDC-grid and DC/DC-converter guidance [21-23]. We include protection-screening dynamics and an averaged EMT model to make the research boundary explicit, but do not claim a finished hardware design. The decisive follow-up is pilot-grade EMT and hardware-in-the-loop validation of the grid-facing terminal, DC/DC stations and AI-load emulator.
 
@@ -1012,6 +1137,11 @@ methods = [
 ("Efficiency calculation", """For AC cases, the receiving-end corridor power is P_recv = P/eta_downstream, where P is the useful 800 VDC load and eta_downstream is the downstream conversion efficiency. Corridor current is I_AC = P_recv/(sqrt(3) V_LL pf), AC line loss is 3 I_AC^2 R, grid input is P_recv plus line loss, and total loss is grid input minus P. For the DC case, receiving-end corridor power is P_recv = P/(eta_DC/DC,1 eta_DC/DC,2), bipole current is I_DC = P_recv/V_pp, line loss is 2 I_DC^2 R, grid input is (P_recv plus line loss)/eta_AC/DC, and total loss is grid input minus P. Central assumptions and the 99.0% local-SST efficiency sensitivity case are listed in Supplementary Table 1, and uncertainty ranges are encoded in the public repository."""),
 ("Harmonic screening and OpenDSS-ready network", """The harmonic model is a frequency-domain screening model. It represents the 138 kV grid by a 10 GVA Thevenin short-circuit strength, three corridor buses and harmonic-dependent source impedance with resonance amplification. OpenDSS-compatible circuit files and archived OpenDSSDirect.py harmonic-run artifacts are included in the repository. The figure-generation script also includes an independent nodal-frequency solver that uses the same equivalent network and harmonic spectra, so the screening result can be reproduced without a proprietary EMT tool. The output metrics are PCC voltage THD and individual harmonic voltage distortion. Parameter provenance is summarized in Supplementary Table 1; measured literature values, public planning data and study assumptions are separated in the public data tables."""),
 ("Averaged EMT-style model", """The dynamic waveform is synthetic but parameterized from the published structure of AI training power traces: compute phases with high accelerator utilization, periodic communication dips and less frequent checkpointing dips [7]. The traditional AC case passes the waveform directly to the grid. The local-SST case applies a 1.1 s first-order smoothing function. The DC-backbone case applies a 16 s grid-facing power command; the difference between the AI load and the commanded grid power defines shared DC-buffer power. The dynamic robustness grid repeats this averaged model across campus count N = 1, 3, 6 and 10; cluster load P = 0.25, 1, 2 and 4.5 GW; voltage class 69, 138, 230 and 320 kV; short-circuit ratio Ssc/P = 3, 5, 10 and 20; random, partial and coherent temporal phase alignment; and corridor lengths of 5, 20, 50 and 100 km. Supplementary Note 2 gives the averaged state equations and validates the first-order command model by time-step convergence and transfer-function tests. The voltage and spectral metrics are screening proxies aligned with voltage-fluctuation and interconnection-oscillation concerns [13,14]. This is an averaged EMT-style comparison of architecture-level exposure, not a switching EMT validation of a specific converter design."""),
+("Travis 150 greenfield configuration and HELICS co-simulation", """The Travis 150 study uses the electric side of the TAMU synthetic gas-electric Travis 150 case and ignores the 47-node gas network. The importer accepts a downloaded PowerWorld AUX electric case through the --travis-case option and falls back to the repository's Austin/Travis synthetic corridor candidates when the external file is absent. The flagship data-center corridor is treated as a new build and the data-center load is incremental to native Travis load. The reported sensitivities use 250 MW, 500 MW and 1 GW loads; the main text reports the 1 GW case.
+
+C1 is modelled as a new AC data-center corridor ending at a 480 V AC facility-distribution boundary. C2 uses a new AC corridor with an SST at the data-center side, local dynamic VAR support at the 34.5 kV AC side and an 800 VDC load boundary. C3 uses a new dedicated bipolar DC data-center corridor, a grid-facing AC/DC terminal, DC/DC conversion near the campus and an 800 VDC load boundary. Transfer capacity is the maximum useful data-center MW before the first thermal, converter, voltage, reactive-power or stability screen violation. Harmonic metrics use the same ownership distinction as the main harmonic model but are scaled to the Travis corridor short-circuit strength and incremental data-center load.
+
+The T&D dynamic run uses HELICS to exchange a transmission POI voltage trajectory with an OpenDSS data-center feeder and a controller federate. The transmission side is a Travis-derived GridDyn-compatible dynamic proxy generated from the electric AUX topology because a complete public Travis 150 dynamic GridDyn model with machine, exciter, governor and protection data was not available. The retained IEEE 39 GridDyn case is only a smoke-test fallback. The default disturbance is an event-inspired repeated voltage-sag waveform with a 0.25 pu minimum; it is not a reconstruction of the 10 July 2024 Eastern Interconnection event. The controller federate implements C2 local 34.5 kV VAR support and C3 centralized AC/DC-terminal support and DC-buffer ride-through. The run manifest records installed-tool versions and convergence flags."""),
 ("Protection-zone screening", """Representative protection dynamics are simulated for a backbone pole-to-ground fault and a campus DC/DC internal fault. The model includes detection, converter current limiting, breaker opening, section isolation and healthy-campus re-energization. It is intended to check plausibility and expose the required protection functions identified in DC-grid protection studies [21,22]; it is not a validated DC-breaker or insulation-coordination design.""")]
 
 figure_legends = {
@@ -1019,11 +1149,12 @@ figure_legends = {
 'Fig. 2 | Efficiency, uncertainty and design space.':'a, Central 1 GW, 20 km reference-case corridor and conversion losses with end-to-end efficiencies to the 800 VDC boundary; bar colours denote loss components, not AC/DC sections. b, Monte Carlo uncertainty at the reference point. c, Load-distance sweep showing where the DC-backbone loss advantage over traditional AC exceeds 10, 50 and 100 MW. d, One-at-a-time sensitivity of the central saving. A 99.0% local-SST efficiency sensitivity case is reported in the text and Supplementary Table 1.',
 'Fig. 3 | Harmonic ownership and OpenDSS-ready screening.':'a, Harmonic ownership boundary for distributed AC-facing converter cases versus the proposed single utility AC/DC terminal. b, Monte Carlo PCC voltage THD for the three architectures and two stronger baselines, with a 5% planning guide shown for context. c, 95th-percentile individual harmonic voltage distortion. d, Direct OpenDSS harmonic solve compared with the internal nodal-frequency solver.',
 'Fig. 4 | Voltage stabilization of synchronized AI training loads.':'a, Compact scenario-grid robustness summary across the 3,072-case dynamic robustness grid; the upper inset shows 0.1-20 Hz grid-side root-sum-square spectral magnitude and the lower inset shows 95th-percentile absolute PCC-voltage deviation, with line segments denoting 5th-95th percentiles and dots denoting medians. b, Grid-side power seen by the utility for the 1 GW reference waveform. c, Shared DC-buffer power and energy window required for the reference waveform.',
-'Fig. 5 | Data-center load pockets and voltage-class envelope.':'a, CAISO San Jose area planning data showing a public multi-GW load-pocket precedent. b, Single-bipole current as a function of cluster load for candidate DC voltage classes; the 1 GW reference point and 3.4-4.2 GW public planning precedent show why voltage class, circuit count or both must scale with load.'}
+'Fig. 5 | Data-center load pockets and voltage-class envelope.':'a, CAISO San Jose area planning data showing a public multi-GW load-pocket precedent. b, Single-bipole current as a function of cluster load for candidate DC voltage classes; the 1 GW reference point and 3.4-4.2 GW public planning precedent show why voltage class, circuit count or both must scale with load.',
+'Fig. 6 | Travis 150 greenfield data-center configuration benefits.':'a, Useful transfer limit for new C1 traditional AC, C2 AC plus SST and C3 bipolar DC data-center corridors in the TAMU Travis 150 synthetic electric case. b, 95th-percentile voltage THD and AC-facing harmonic-source ownership at 1 GW. c, Event-inspired GridDyn/HELICS/OpenDSS voltage-sag proxy showing minimum data-center boundary voltage, load-served fraction and trip outcome; the sag waveform is not a reconstruction of a specific real event.'}
 
-data_availability = """All inputs and outputs used to generate Figs. 2-5 and Supplementary Figs. S1-S4 are included in the accompanying reproducibility package as CSV files. Public external data are cited in the References. No restricted operational data are used. Before journal submission, this package should be deposited in Zenodo and this statement should be updated with the final DOI."""
+data_availability = """All inputs and outputs used to generate Figs. 2-6 and Supplementary Figs. S1-S4 are included in the accompanying reproducibility package as CSV files. The Travis 150 greenfield outputs, HELICS/OpenDSS/GridDyn proxy summaries, voltage-sag waveform and run manifest are included with the package; the original Travis 150 electric case is available from the TAMU Electric Grid Test Case Repository subject to its download form. Public external data are cited in the References. No restricted operational data are used. Before journal submission, this package should be deposited in Zenodo and this statement should be updated with the final DOI."""
 
-code_availability = """The Python code, OpenDSS-compatible circuit files, archived OpenDSSDirect.py harmonic-run artifacts and reproduction scripts are included in the public code repository at https://github.com/SavannahY/dc-ai-factory-backbone-reproducibility. Before journal submission, the final Zenodo DOI should be inserted here."""
+code_availability = """The Python code, OpenDSS-compatible circuit files, archived OpenDSSDirect.py harmonic-run artifacts, Travis 150 greenfield screening script, GridDyn/HELICS/OpenDSS dynamic-VAR runner and reproduction scripts are included in the public code repository at https://github.com/SavannahY/dc-ai-factory-backbone-reproducibility. Before journal submission, the final Zenodo DOI should be inserted here."""
 
 ai_disclosure = """During manuscript preparation, the authors used AI-assisted tools for drafting support, code refactoring, reference-format checking and editorial revision. The authors reviewed and edited all generated text, verified all scientific claims, generated the final figures from reproducible code and take full responsibility for the content of the submitted manuscript."""
 
@@ -1050,7 +1181,9 @@ references = [
 "She, X., Huang, A. Q. & Burgos, R. Review of solid-state transformer technologies and their application in power distribution systems. IEEE J. Emerg. Sel. Top. Power Electron. 1, 186-198 (2013). https://doi.org/10.1109/JESTPE.2013.2277917.",
 "CIGRE Working Group B4.52. HVDC grid feasibility study. CIGRE Technical Brochure 533 (2013); https://www.e-cigre.org/publications/detail/533-hvdc-grid-feasibility-study.html.",
 "CIGRE Joint Working Group B4/B5.59. Protection and local control of HVDC-grids. CIGRE Technical Brochure 739 (2018); https://www.e-cigre.org/publications/detail/739-protection-and-local-control-of-hvdc-grids.html.",
-"CIGRE Working Group B4.76. DC-DC converters in HVDC grids and for connections to HVDC systems. CIGRE Technical Brochure 827 (2021); https://electra.cigre.org/315-april-2021/technical-brochures/dc-dc-converters-in-hvdc-grids-and-for-connections-to-hvdc-systems.html."
+"CIGRE Working Group B4.76. DC-DC converters in HVDC grids and for connections to HVDC systems. CIGRE Technical Brochure 827 (2021); https://electra.cigre.org/315-april-2021/technical-brochures/dc-dc-converters-in-hvdc-grids-and-for-connections-to-hvdc-systems.html.",
+"Texas A&M University Electric Grid Test Case Repository. Synthetic Gas-Electric Test Case for the Travis 150 System. https://electricgrids.engr.tamu.edu/synthetic-gas-electric-test-case-for-the-travis-150-system/ (accessed 21 June 2026).",
+"Electric Reliability Council of Texas. Planning. https://www.ercot.com/gridinfo/planning (accessed 21 June 2026)."
 ]
 
 main_md = '# Direct-current subtransmission backbones for grid-stable AI factories\n\n'
@@ -1087,6 +1220,9 @@ The DC protection study represents detection, converter current limiting, breake
 
 # Supplementary Note 4. Buffer and economics interpretation
 The reference buffer requirement is high power and low energy. It can be met only by coordinated layers: GPU power smoothing, rack or row storage, supercapacitors, converter DC-link energy and station-level storage. The cost/copper envelope is a first-order screen and is not a capital-cost estimate.
+
+# Supplementary Note 5. Travis 150 greenfield proxy
+The Travis 150 analysis uses only the synthetic electric case. The companion gas network is ignored. The C1, C2 and C3 systems are new data-center supply configurations, not conversions of existing AC lines. The GridDyn dynamic case is a Travis-derived proxy generated from the electric topology; it verifies GridDyn-to-HELICS-to-OpenDSS coupling and voltage-sag propagation but does not replace a full utility-grade dynamic model.
 
 # Supplementary Table 1. Assumption provenance
 See data/assumption_provenance_table_v3.csv.
@@ -1176,7 +1312,7 @@ def create_main_docx():
     for idx,(h,txt) in enumerate(results_sections[1:], start=2):
         doc.add_heading(h,level=2)
         for para in txt.split('\n\n'): add_para(doc,para)
-        fpath={2:'fig2_efficiency_uncertainty_designspace_v3.png',3:'fig3_harmonic_ownership_opendss_screening_v3.png',4:'fig4_voltage_stabilization_averaged_emt_v3.png',5:'fig5_case_study_voltage_envelope_v3.png'}[idx]
+        fpath={2:'fig2_efficiency_uncertainty_designspace_v3.png',3:'fig3_harmonic_ownership_opendss_screening_v3.png',4:'fig4_voltage_stabilization_averaged_emt_v3.png',5:'fig5_case_study_voltage_envelope_v3.png',6:'fig6_travis150_greenfield_benefits_v2.png'}[idx]
         cap_key=list(figure_legends.keys())[idx-1]
         add_fig(doc, FIG/fpath, cap_key+' '+figure_legends[cap_key])
     doc.add_heading('Discussion',level=1)
@@ -1221,6 +1357,8 @@ def create_supp_docx():
     add_para(doc,'The reference buffer requirement is high power and low energy. It can be met only by coordinated layers: GPU power smoothing, rack or row storage, supercapacitors, converter DC-link energy and station-level storage. The cost/copper envelope is a first-order screen and is not a capital-cost estimate.')
     add_fig(doc, FIG/'supp_fig_s3_buffer_feasibility_v3.png', 'Supplementary Fig. S3 | Physical interpretation of the shared DC buffer. Candidate technologies and deployment layers for high-power, low-energy buffering.')
     add_fig(doc, FIG/'supp_fig_s4_cost_copper_envelope_v3.png', 'Supplementary Fig. S4 | Cost and copper first-order envelope. Annual value of loss reduction and current-length proxy for corridor conductor burden.')
+    doc.add_heading('Supplementary Note 5. Travis 150 greenfield proxy',level=1)
+    add_para(doc,'The Travis 150 analysis uses only the synthetic electric case. The companion gas network is ignored. The C1, C2 and C3 systems are new data-center supply configurations, not conversions of existing AC lines. The GridDyn dynamic case is a Travis-derived proxy generated from the electric topology; it verifies GridDyn-to-HELICS-to-OpenDSS coupling and voltage-sag propagation but does not replace a full utility-grade dynamic model.')
     out=SUPP/'Supplementary_Information_NComms_v3.docx'; doc.save(out); return out
 
 main_docx=create_main_docx(); supp_docx=create_supp_docx()
@@ -1280,7 +1418,7 @@ if (source_scripts/'run_true_opendss.py').exists():
     def note():
         return 'Use this module for the transparent nodal frequency-domain solver. OpenDSS-compatible files are in opendss/.'
 '''))
-for helper in ['reproduce_all.py','dynamic_robustness_sweep.py','harmonic_robustness_sweep.py']:
+for helper in ['reproduce_all.py','dynamic_robustness_sweep.py','harmonic_robustness_sweep.py','travis150_greenfield_c1_c2_c3.py','run_griddyn_td_dynamic_var.py']:
     source_helper=Path(__file__).resolve().with_name(helper)
     if source_helper.exists():
         shutil.copy(source_helper,REPO/'scripts'/helper)
@@ -1318,12 +1456,16 @@ if not (REPO/'scripts'/'reproduce_all.py').exists():
     - `src/ai_dc_backbone/`: reusable Python model modules.
     - `scripts/`: reproduction helpers and optional OpenDSS runner.
     - `opendss/`: OpenDSS-compatible harmonic network files.
+    - Travis 150 greenfield C1/C2/C3 outputs and GridDyn/HELICS/OpenDSS proxy
+      summaries are archived under `data/`.
 
     ## Reproducing results
     ```bash
     python scripts/reproduce_all.py
     python scripts/dynamic_robustness_sweep.py
     python scripts/harmonic_robustness_sweep.py
+    python scripts/travis150_greenfield_c1_c2_c3.py
+    python scripts/run_griddyn_td_dynamic_var.py --travis-case Travis150/Travis150_Electric_Data.aux --execute
     python scripts/run_opendss_if_available.py  # optional, requires opendssdirect.py
     ```
 
@@ -1335,6 +1477,10 @@ if not (REPO/'scripts'/'reproduce_all.py').exists():
     grid and supporting figures. The manuscript figures were generated with
     transparent Python models. OpenDSS circuit files and the run log are
     included under `opendss/`.
+    The Travis 150 dynamic-VAR run uses GridDyn, HELICS and OpenDSSDirect.py
+    when those external tools are installed; archived proxy outputs are included
+    so manuscript Fig. 6 remains reproducible without rerunning the external
+    simulators.
 
     ## Citation
     See `CITATION.cff`. This repository is structured for GitHub release and Zenodo deposition.
@@ -1404,6 +1550,20 @@ if not (REPO/'scripts'/'reproduce_all.py').exists():
     python scripts/harmonic_robustness_sweep.py
     ```
 
+    To regenerate the Travis 150 greenfield C1/C2/C3 screen after downloading
+    the TAMU electric AUX case, run:
+
+    ```bash
+    python scripts/travis150_greenfield_c1_c2_c3.py --travis-case Travis150/Travis150_Electric_Data.aux
+    ```
+
+    To rerun the installed-tool T&D proxy when GridDyn, HELICS and
+    OpenDSSDirect.py are available, run:
+
+    ```bash
+    python scripts/run_griddyn_td_dynamic_var.py --travis-case Travis150/Travis150_Electric_Data.aux --execute
+    ```
+
     The complete manuscript-package generator is `scripts/build_dc_backbone_v3.py`.
     It is retained for auditability and can be used to rebuild the full manuscript
     package in an environment with the dependencies listed in `requirements.txt`.
@@ -1433,6 +1593,7 @@ if not (REPO/'scripts'/'reproduce_all.py').exists():
     - Fig. 3: `figures/fig3_harmonic_ownership_opendss_screening_v3.{png,svg}`
     - Fig. 4: `figures/fig4_voltage_stabilization_averaged_emt_v3.{png,svg}`
     - Fig. 5: `figures/fig5_case_study_voltage_envelope_v3.{png,svg}`
+    - Fig. 6: `figures/fig6_travis150_greenfield_benefits_v2.{png,svg}`
     - Supplementary Fig. S1: `figures/supp_fig_s1_dc_fault_protection_dynamic_v3.{png,svg}`
     - Supplementary Fig. S2: `figures/supp_fig_s2_averaged_emt_validation_v3.{png,svg}`
     - Supplementary Fig. S3: `figures/supp_fig_s3_buffer_feasibility_v3.{png,svg}`

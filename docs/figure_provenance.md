@@ -15,6 +15,9 @@ grid and supporting CSV tables.
 screening figures and the supporting CSV tables.
 `scripts/texas_td_c0_c2_c3_scenarios.py` regenerates the Texas T&D C0/C1/C2/C3
 add-on figure and its supporting CSV tables.
+`scripts/travis150_greenfield_c1_c2_c3.py` and
+`scripts/run_griddyn_td_dynamic_var.py` provide the Travis 150 greenfield and
+GridDyn/HELICS/OpenDSS data used in Fig. 6.
 
 Final figure files:
 
@@ -23,6 +26,7 @@ Final figure files:
 - Fig. 3: `figures/fig3_harmonic_ownership_opendss_screening_v3.{png,svg}`
 - Fig. 4: `figures/fig4_voltage_stabilization_averaged_emt_v3.{png,svg}`
 - Fig. 5: `figures/fig5_case_study_voltage_envelope_v3.{png,svg}`
+- Fig. 6: `figures/fig6_travis150_greenfield_benefits_v2.{png,svg,pdf}`
 - Texas T&D C0/C1/C2/C3 add-on: `figures/texas_td_c0_c2_c3_summary_v1.{png,svg}`
 - Supplementary Fig. S1: `figures/supp_fig_s1_dc_fault_protection_dynamic_v3.{png,svg}`
 - Supplementary Fig. S2: `figures/supp_fig_s2_averaged_emt_validation_v3.{png,svg}`

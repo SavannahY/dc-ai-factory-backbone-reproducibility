@@ -84,13 +84,15 @@ OpenDSSDirect.py in the Python environment, run:
 ```bash
 python scripts/run_griddyn_td_dynamic_var.py \
   --griddyn-exe /path/to/gridDynMain \
+  --travis-case Travis150/Travis150_Electric_Data.aux \
   --execute
 ```
 
 The resulting manifest, GridDyn recorder, HELICS/OpenDSS time series and summary
 CSV files are under `cosim/griddyn_td_dynamic_var/results/`. The default demo
-uses GridDyn's IEEE 39 dynamic case; pass `--griddyn-case` and
-`--poi-voltage-field` for an IEEE 118 or Texas A&M 150-bus dynamic case.
+uses a Travis-derived GridDyn proxy when `--travis-case` is supplied and labels
+the three configurations as C1, C2 and C3; pass `--griddyn-case` and
+`--poi-voltage-field` for a full IEEE 118 or Texas A&M 150-bus dynamic case.
 
 The dynamic and harmonic sweeps each evaluate 3,072 input-grid points and 9,216
 architecture cases across campus count, cluster load, voltage class,

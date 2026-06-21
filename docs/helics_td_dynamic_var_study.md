@@ -144,16 +144,19 @@ and architecture-level voltage-support assumptions in
 The GridDyn-backed path under `cosim/griddyn_td_dynamic_var/` now includes an
 executed local GridDyn/HELICS/OpenDSS demo:
 
-- GridDyn executable: `/tmp/GridDyn-build/bin/gridDynMain` in the local run.
-- Transmission case: repeated-fault IEEE 39 dynamic GridDyn case generated at
-  `cosim/griddyn_td_dynamic_var/results/griddyn_ieee39_repeated_fault_case.xml`.
+- GridDyn executable: `/opt/homebrew/bin/gridDynMain` in the local run.
+- Transmission case: Travis-derived GridDyn proxy generated at
+  `cosim/griddyn_td_dynamic_var/results/griddyn_travis150_proxy_case.xml` from
+  `Travis150/Travis150_Electric_Data.aux`.
 - HELICS/OpenDSS result: `cosim/griddyn_td_dynamic_var/results/helics_opendss_dynamic_var_summary.csv`.
-- Result: the GridDyn POI voltage reached 0.325 pu; OpenDSS AC-side data-center
-  voltage reached 0.313 pu in the baseline and 0.322 pu with either local
-  34.5 kV or centralized 138 kV 120 Mvar support. The AC-side trip flag still
-  asserted for this severe repeated-fault demo.
+- Result: the HELICS POI voltage reached 0.250 pu using the documented
+  event-inspired sag train. C1 reached 0.241 pu at the 480 V AC load boundary
+  and tripped. C2 reached 0.241 pu at the local SST boundary and still tripped
+  in this severe uncoordinated local-support demo. C3 reached 0.241 pu on the
+  OpenDSS AC side, but the modeled DC buffer held the 800 VDC load boundary at
+  1.0 pu and the data center did not trip.
 
-This is not yet an IEEE 118-bus or Texas A&M 150-bus dynamic result, because
-that dynamic case data is not included in the repository. Use
+This is not yet a full Texas A&M Travis 150 dynamic result, because generator,
+load and protection dynamic data are not included in the public AUX case. Use
 `scripts/run_griddyn_td_dynamic_var.py --griddyn-case ... --poi-voltage-field ...`
-when that case is supplied.
+when that full dynamic case is supplied.
