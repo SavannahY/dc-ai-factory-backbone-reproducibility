@@ -1,4 +1,4 @@
-import os, json, math, shutil, zipfile, hashlib, textwrap
+import os, json, math, shutil, zipfile, hashlib, textwrap, subprocess
 from itertools import product
 from pathlib import Path
 import numpy as np
@@ -25,8 +25,8 @@ ROOT = Path(os.environ.get(
 SOURCE_ROOT = Path(os.environ.get('DC_BACKBONE_SOURCE_ROOT', Path(__file__).resolve().parents[1]))
 if ROOT.exists():
     shutil.rmtree(ROOT)
-FIG = ROOT/'figures'; DATA = ROOT/'data'; CODE=ROOT/'code'; RENDER=ROOT/'rendered'; OPENDSS=ROOT/'opendss'; SUPP=ROOT/'supplementary'; REPO=ROOT/'public_code_repo'
-for p in [FIG, DATA, CODE, RENDER, OPENDSS, SUPP, REPO]: p.mkdir(parents=True, exist_ok=True)
+FIG = ROOT/'figures'; DATA = ROOT/'data'; CODE=ROOT/'code'; RENDER=ROOT/'rendered'; OPENDSS=ROOT/'opendss'; SUPP=ROOT/'supplementary'; SOURCE_DATA=ROOT/'source_data'; REPO=ROOT/'public_code_repo'
+for p in [FIG, DATA, CODE, RENDER, OPENDSS, SUPP, SOURCE_DATA, REPO]: p.mkdir(parents=True, exist_ok=True)
 for p in [REPO/'src'/'ai_dc_backbone', REPO/'scripts', REPO/'data', REPO/'figures', REPO/'opendss', REPO/'docs']:
     p.mkdir(parents=True, exist_ok=True)
 
@@ -837,6 +837,23 @@ def figure5():
     fig,axes=plt.subplots(1,2,figsize=(10.8,4.1),gridspec_kw={'width_ratios':[1.0,1.35]})
     ax=axes[0]
     bars=[2.1,3.4,4.2]; labs=['2021-22\nstudy','2024-25\nbase','2024-25\nhigh-load\nsensitivity']
+    pd.DataFrame({
+        'panel': ['5a'] * len(bars),
+        'case': ['2021-22 study', '2024-25 base', '2024-25 high-load sensitivity'],
+        'san_jose_study_area_load_gw': bars,
+        'source': ['CAISO San Jose area planning documents'] * len(bars),
+    }).to_csv(DATA/'fig5_load_pocket_source_data_v3.csv', index=False)
+    current_rows = []
+    for load_gw in np.linspace(0.1, 5.0, 150):
+        for pole_kv in [69, 138, 230, 320]:
+            current_rows.append({
+                'panel': '5b',
+                'cluster_load_gw': float(load_gw),
+                'pole_voltage_kv': pole_kv,
+                'bipole_voltage_kv': 2 * pole_kv,
+                'single_bipole_current_ka': float(load_gw * 1e9 / (2 * pole_kv * 1e3) / 1000),
+            })
+    pd.DataFrame(current_rows).to_csv(DATA/'fig5_voltage_class_current_envelope_v3.csv', index=False)
     x=np.arange(len(bars))
     ax.bar(x,bars,color=['#c9c9c9','#8f8f8f','#4f4f4f'],width=0.62)
     ax.set_xticks(x); ax.set_xticklabels(labs,fontsize=7.5); ax.set_ylabel('San Jose study-area load forecast (GW)')
@@ -1137,11 +1154,11 @@ methods = [
 ("Efficiency calculation", """For AC cases, the receiving-end corridor power is P_recv = P/eta_downstream, where P is the useful 800 VDC load and eta_downstream is the downstream conversion efficiency. Corridor current is I_AC = P_recv/(sqrt(3) V_LL pf), AC line loss is 3 I_AC^2 R, grid input is P_recv plus line loss, and total loss is grid input minus P. For the DC case, receiving-end corridor power is P_recv = P/(eta_DC/DC,1 eta_DC/DC,2), bipole current is I_DC = P_recv/V_pp, line loss is 2 I_DC^2 R, grid input is (P_recv plus line loss)/eta_AC/DC, and total loss is grid input minus P. Central assumptions and the 99.0% local-SST efficiency sensitivity case are listed in Supplementary Table 1, and uncertainty ranges are encoded in the public repository."""),
 ("Harmonic screening and OpenDSS-ready network", """The harmonic model is a frequency-domain screening model. It represents the 138 kV grid by a 10 GVA Thevenin short-circuit strength, three corridor buses and harmonic-dependent source impedance with resonance amplification. OpenDSS-compatible circuit files and archived OpenDSSDirect.py harmonic-run artifacts are included in the repository. The figure-generation script also includes an independent nodal-frequency solver that uses the same equivalent network and harmonic spectra, so the screening result can be reproduced without a proprietary EMT tool. The output metrics are PCC voltage THD and individual harmonic voltage distortion. Parameter provenance is summarized in Supplementary Table 1; measured literature values, public planning data and study assumptions are separated in the public data tables."""),
 ("Averaged EMT-style model", """The dynamic waveform is synthetic but parameterized from the published structure of AI training power traces: compute phases with high accelerator utilization, periodic communication dips and less frequent checkpointing dips [7]. The traditional AC case passes the waveform directly to the grid. The local-SST case applies a 1.1 s first-order smoothing function. The DC-backbone case applies a 16 s grid-facing power command; the difference between the AI load and the commanded grid power defines shared DC-buffer power. The dynamic robustness grid repeats this averaged model across campus count N = 1, 3, 6 and 10; cluster load P = 0.25, 1, 2 and 4.5 GW; voltage class 69, 138, 230 and 320 kV; short-circuit ratio Ssc/P = 3, 5, 10 and 20; random, partial and coherent temporal phase alignment; and corridor lengths of 5, 20, 50 and 100 km. Supplementary Note 2 gives the averaged state equations and validates the first-order command model by time-step convergence and transfer-function tests. The voltage and spectral metrics are screening proxies aligned with voltage-fluctuation and interconnection-oscillation concerns [13,14]. This is an averaged EMT-style comparison of architecture-level exposure, not a switching EMT validation of a specific converter design."""),
-("Travis 150 greenfield configuration and HELICS co-simulation", """The Travis 150 study uses the electric side of the TAMU synthetic gas-electric Travis 150 case and ignores the 47-node gas network. The importer accepts a downloaded PowerWorld AUX electric case through the --travis-case option and falls back to the repository's Austin/Travis synthetic corridor candidates when the external file is absent. The flagship data-center corridor is treated as a new build and the data-center load is incremental to native Travis load. The reported sensitivities use 250 MW, 500 MW and 1 GW loads; the main text reports the 1 GW case.
+("Travis 150 greenfield configuration and HELICS co-simulation", """The Travis 150 study uses the electric side of the TAMU synthetic gas-electric Travis 150 case and ignores the 47-node gas network. The importer accepts a downloaded PowerWorld AUX electric case through the --travis-case option and falls back to the repository's Austin/Travis synthetic corridor candidates when the external file is absent. The flagship data-center corridor is treated as a new build and the data-center load is incremental to native Travis load. In the AUX-based run, closed high-voltage candidate branches are ranked by source strength, load-pocket suitability, transfer and converter headroom and corridor length; the selected span is from 163 Decker Creek Power Plant 1 to 147 Travis_DS_127 1, approximately 9.64 km at 230 kV. The archived fallback placement is B_04 to B_101. The reported sensitivities use 250 MW, 500 MW and 1 GW loads; the main text reports the 1 GW case.
 
 C1 is modelled as a new AC data-center corridor ending at a 480 V AC facility-distribution boundary. C2 uses a new AC corridor with an SST at the data-center side, local dynamic VAR support at the 34.5 kV AC side and an 800 VDC load boundary. C3 uses a new dedicated bipolar DC data-center corridor, a grid-facing AC/DC terminal, DC/DC conversion near the campus and an 800 VDC load boundary. Transfer capacity is the maximum useful data-center MW before the first thermal, converter, voltage, reactive-power or stability screen violation. Harmonic metrics use the same ownership distinction as the main harmonic model but are scaled to the Travis corridor short-circuit strength and incremental data-center load.
 
-The T&D dynamic run uses HELICS to exchange a transmission POI voltage trajectory with an OpenDSS data-center feeder and a controller federate. The transmission side is a Travis-derived GridDyn-compatible dynamic proxy generated from the electric AUX topology because a complete public Travis 150 dynamic GridDyn model with machine, exciter, governor and protection data was not available. The retained IEEE 39 GridDyn case is only a smoke-test fallback. The default disturbance is an event-inspired repeated voltage-sag waveform with a 0.25 pu minimum; it is not a reconstruction of the 10 July 2024 Eastern Interconnection event. The controller federate implements C2 local 34.5 kV VAR support and C3 centralized AC/DC-terminal support and DC-buffer ride-through. The run manifest records installed-tool versions and convergence flags."""),
+The T&D dynamic run uses HELICS to exchange a transmission POI voltage trajectory with an OpenDSS data-center feeder and a controller federate. The transmission side is a Travis-derived GridDyn-compatible dynamic proxy generated from the electric AUX topology because a complete public Travis 150 dynamic GridDyn model with machine, exciter, governor and protection data was not available. The retained IEEE 39 GridDyn case is only a smoke-test fallback. The default disturbance is an event-inspired repeated voltage-sag waveform, not a permanent physical line trip on a validated dynamic Travis model. It applies six short sag pulses from 30.0 s to 112.0 s, spanning the approximately 82 s fault-window reference, with voltage depths between 0.25 and 0.40 pu. The simulation runs from 0 to 114.06 s with a 20 ms GridDyn/HELICS/OpenDSS exchange step; the deepest sag is 0.25 pu at 79.2 s. The controller federate implements C2 local 34.5 kV VAR support and C3 centralized AC/DC-terminal support and DC-buffer ride-through. Trip logic flags an AC-side trip when voltage remains below 0.50 pu for at least 0.04 s. The run manifest records installed-tool versions and convergence flags."""),
 ("Protection-zone screening", """Representative protection dynamics are simulated for a backbone pole-to-ground fault and a campus DC/DC internal fault. The model includes detection, converter current limiting, breaker opening, section isolation and healthy-campus re-energization. It is intended to check plausibility and expose the required protection functions identified in DC-grid protection studies [21,22]; it is not a validated DC-breaker or insulation-coordination design.""")]
 
 figure_legends = {
@@ -1152,9 +1169,9 @@ figure_legends = {
 'Fig. 5 | Data-center load pockets and voltage-class envelope.':'a, CAISO San Jose area planning data showing a public multi-GW load-pocket precedent. b, Single-bipole current as a function of cluster load for candidate DC voltage classes; the 1 GW reference point and 3.4-4.2 GW public planning precedent show why voltage class, circuit count or both must scale with load.',
 'Fig. 6 | Travis 150 greenfield data-center configuration benefits.':'a, Useful transfer limit for new C1 traditional AC, C2 AC plus SST and C3 bipolar DC data-center corridors in the TAMU Travis 150 synthetic electric case. b, 95th-percentile voltage THD and AC-facing harmonic-source ownership at 1 GW. c, Event-inspired GridDyn/HELICS/OpenDSS voltage-sag proxy showing minimum data-center boundary voltage, load-served fraction and trip outcome; the sag waveform is not a reconstruction of a specific real event.'}
 
-data_availability = """All inputs and outputs used to generate Figs. 2-6 and Supplementary Figs. S1-S4 are included in the accompanying reproducibility package as CSV files. The Travis 150 greenfield outputs, HELICS/OpenDSS/GridDyn proxy summaries, voltage-sag waveform and run manifest are included with the package; the original Travis 150 electric case is available from the TAMU Electric Grid Test Case Repository subject to its download form. Public external data are cited in the References. No restricted operational data are used. Before journal submission, this package should be deposited in Zenodo and this statement should be updated with the final DOI."""
+data_availability = """All numerical data underlying the graphs are included in the accompanying source-data folder and reproducibility package as CSV files. The package includes the Travis 150 greenfield outputs, HELICS/OpenDSS/GridDyn proxy summaries, voltage-sag waveform, run manifest and figure-generation inputs. The original Travis 150 electric case is available from the TAMU Electric Grid Test Case Repository subject to its download form. Public external data are cited in the References. No restricted operational data are used. A citable Zenodo archive can be minted from the GitHub release at acceptance or before final submission."""
 
-code_availability = """The Python code, OpenDSS-compatible circuit files, archived OpenDSSDirect.py harmonic-run artifacts, Travis 150 greenfield screening script, GridDyn/HELICS/OpenDSS dynamic-VAR runner and reproduction scripts are included in the public code repository at https://github.com/SavannahY/dc-ai-factory-backbone-reproducibility. Before journal submission, the final Zenodo DOI should be inserted here."""
+code_availability = """The Python code, OpenDSS-compatible circuit files, archived OpenDSSDirect.py harmonic-run artifacts, Travis 150 greenfield screening script, GridDyn/HELICS/OpenDSS dynamic-VAR runner and reproduction scripts are included in the public code repository at https://github.com/SavannahY/dc-ai-factory-backbone-reproducibility and in the submitted reproducibility archive. A permanent Zenodo DOI can be added to this statement once a release archive is minted."""
 
 ai_disclosure = """During manuscript preparation, the authors used AI-assisted tools for drafting support, code refactoring, reference-format checking and editorial revision. The authors reviewed and edited all generated text, verified all scientific claims, generated the final figures from reproducible code and take full responsibility for the content of the submitted manuscript."""
 
@@ -1187,7 +1204,7 @@ references = [
 ]
 
 main_md = '# Direct-current subtransmission backbones for grid-stable AI factories\n\n'
-main_md += 'Zhengjie Yang^1,* and Liang Min^1,*\n\n^1 Stanford University, Stanford, CA, USA.\n\n*Correspondence: yjane@stanford.edu; liangmin@stanford.edu\n\n'
+main_md += 'Zhengjie Yang^1,*^ and Liang Min^1,*^\n\n^1^ Stanford University, Stanford, CA, USA.\n\n*Correspondence: yjane@stanford.edu; liangmin@stanford.edu\n\n'
 main_md += '## Abstract\n' + abstract + '\n\n'
 main_md += '## Introduction\n' + intro + '\n\n'
 main_md += '## Results\n\n'
@@ -1198,12 +1215,13 @@ for h,txt in methods: main_md += f'### {h}\n{txt}\n\n'
 main_md += '## Data availability\n' + data_availability + '\n\n'
 main_md += '## Code availability\n' + code_availability + '\n\n'
 main_md += '## AI-assisted drafting disclosure\n' + ai_disclosure + '\n\n'
+main_md += '## References\n\n'
+for i,refi in enumerate(references,1): main_md += f'{i}. {refi}\n'
+main_md += '\n'
 main_md += '## Author contributions\nZ.Y. and L.M. contributed to the conceptual framing, analysis and manuscript preparation. Both authors reviewed and approved the manuscript.\n\n'
 main_md += '## Competing interests\nThe authors declare no competing interests.\n\n'
 main_md += '## Figure legends\n\n'
 for k,v in figure_legends.items(): main_md += f'**{k}** {v}\n\n'
-main_md += '## References\n\n'
-for i,refi in enumerate(references,1): main_md += f'{i}. {refi}\n'
 (ROOT/'Direct_current_subtransmission_backbones_for_grid_stable_AI_factories_NComms_v3.md').write_text(main_md)
 
 # Supplementary text
@@ -1279,6 +1297,8 @@ def add_hyperlink(paragraph, url, text, color="0563C1", underline=True):
 def style_doc(doc):
     styles=doc.styles
     styles['Normal'].font.name='Arial'; styles['Normal']._element.rPr.rFonts.set(qn('w:eastAsia'),'Arial'); styles['Normal'].font.size=Pt(10)
+    styles['Normal'].paragraph_format.line_spacing=2.0
+    styles['Normal'].paragraph_format.space_after=Pt(0)
     for style in ['Title','Heading 1','Heading 2','Heading 3']:
         styles[style].font.name='Arial'; styles[style]._element.rPr.rFonts.set(qn('w:eastAsia'),'Arial')
     styles['Title'].font.size=Pt(18); styles['Title'].font.bold=True
@@ -1287,7 +1307,7 @@ def style_doc(doc):
     styles['Heading 3'].font.size=Pt(10.5); styles['Heading 3'].font.bold=True
 
 def add_para(doc, text):
-    p=doc.add_paragraph(text); p.paragraph_format.space_after=Pt(5); p.paragraph_format.line_spacing=1.05; return p
+    p=doc.add_paragraph(text); p.paragraph_format.space_after=Pt(0); p.paragraph_format.line_spacing=2.0; return p
 
 def add_fig(doc, path, caption, width=6.3):
     doc.add_picture(str(path), width=Inches(width))
@@ -1324,12 +1344,15 @@ def create_main_docx():
     doc.add_heading('Data availability',level=1); add_para(doc,data_availability)
     doc.add_heading('Code availability',level=1); add_para(doc,code_availability)
     doc.add_heading('AI-assisted drafting disclosure',level=1); add_para(doc,ai_disclosure)
+    doc.add_heading('References',level=1)
+    for i,refi in enumerate(references,1): add_para(doc,f'{i}. {refi}')
     doc.add_heading('Author contributions',level=1)
     add_para(doc,'Z.Y. and L.M. contributed to the conceptual framing, analysis and manuscript preparation. Both authors reviewed and approved the manuscript.')
     doc.add_heading('Competing interests',level=1)
     add_para(doc,'The authors declare no competing interests.')
-    doc.add_heading('References',level=1)
-    for i,refi in enumerate(references,1): add_para(doc,f'{i}. {refi}')
+    doc.add_heading('Figure legends',level=1)
+    for key, legend in figure_legends.items():
+        add_para(doc, f'{key} {legend}')
     out=ROOT/'Direct_current_subtransmission_backbones_for_grid_stable_AI_factories_NComms_v3.docx'
     doc.save(out); return out
 
@@ -1362,6 +1385,192 @@ def create_supp_docx():
     out=SUPP/'Supplementary_Information_NComms_v3.docx'; doc.save(out); return out
 
 main_docx=create_main_docx(); supp_docx=create_supp_docx()
+
+def create_source_data_package():
+    source_map = {
+        'Fig. 2': [
+            'efficiency_reference_case_v3.csv',
+            'efficiency_uncertainty_reference_v3.csv',
+            'efficiency_design_space_v3.csv',
+            'sensitivity_tornado_v3.csv',
+        ],
+        'Fig. 3': [
+            'harmonic_thdv_monte_carlo_v3.csv',
+            'harmonic_individual_p95_v3.csv',
+            'true_opendss_harmonic_thdv_monte_carlo_v3.csv',
+            'true_opendss_harmonic_individual_spectrum_v3.csv',
+        ],
+        'Fig. 4': [
+            'dynamic_robustness_summary_v3.csv',
+            'dynamic_robustness_architecture_comparison_v3.csv',
+            'dynamic_timeseries_v3.csv',
+            'dynamic_metrics_v3.csv',
+        ],
+        'Fig. 5': [
+            'fig5_load_pocket_source_data_v3.csv',
+            'fig5_voltage_class_current_envelope_v3.csv',
+        ],
+        'Fig. 6': [
+            'travis150_greenfield_c1_c2_c3_summary_v2.csv',
+            'travis150_greenfield_c1_c2_c3_transfer_v2.csv',
+            'travis150_greenfield_c1_c2_c3_harmonics_v2.csv',
+            'travis150_greenfield_c1_c2_c3_voltage_v2.csv',
+        ],
+        'Supplementary figures': [
+            'dc_fault_protection_backbone_fault_v3.csv',
+            'dc_fault_protection_campus_fault_v3.csv',
+            'emt_timestep_convergence_v3.csv',
+            'emt_transfer_function_validation_v3.csv',
+            'buffer_physical_feasibility_table_v3.csv',
+            'cost_copper_envelope_v3.csv',
+            'harmonic_robustness_summary_v3.csv',
+            'harmonic_robustness_architecture_comparison_v3.csv',
+            'harmonic_robustness_individual_p95_v3.csv',
+        ],
+        'Assumptions and provenance': [
+            'assumptions_v3.json',
+            'assumption_provenance_table_v3.csv',
+        ],
+    }
+    readme_lines = [
+        '# Source data for figures',
+        '',
+        'This folder contains machine-readable numerical data underlying the main and supplementary graphs.',
+        'Each file is copied from the reproducibility-package `data/` directory without modification.',
+        '',
+    ]
+    for label, filenames in source_map.items():
+        readme_lines.append(f'## {label}')
+        for name in filenames:
+            src = DATA / name
+            if src.exists():
+                shutil.copy(src, SOURCE_DATA / name)
+                readme_lines.append(f'- `{name}`')
+        readme_lines.append('')
+    readme = SOURCE_DATA / 'README.md'
+    readme.write_text('\n'.join(readme_lines), encoding='utf-8')
+    source_zip = ROOT / 'source_data_csv.zip'
+    with zipfile.ZipFile(source_zip, 'w', zipfile.ZIP_DEFLATED) as z:
+        for f in sorted(SOURCE_DATA.rglob('*')):
+            if f.is_file():
+                z.write(f, f.relative_to(SOURCE_DATA.parent))
+    return source_zip
+
+source_data_zip = create_source_data_package()
+
+cover_letter = """Dear Editors,
+
+We are pleased to submit "Direct-current subtransmission backbones for grid-stable AI factories" for consideration as an Article in Nature Communications.
+
+AI data centers are becoming synchronized, DC-native, gigawatt-scale loads, but grid planning still often treats them as passive AC facilities. This manuscript asks where the AC/DC boundary should sit when the useful facility boundary is 800 VDC. We compare traditional AC delivery, local solid-state-transformer delivery and a utility-operated subtransmission DC backbone.
+
+The main contribution is a falsifiable architecture-level claim: moving the AC/DC boundary upstream can co-locate three benefits that are usually studied separately. In the reference and Travis 150 greenfield studies, the DC-corridor architecture increases useful transfer capacity, centralizes AC-side harmonic ownership and improves voltage ride-through under an event-inspired transmission-voltage sag. The Travis 150 analysis is explicitly framed as a synthetic test-bed result rather than a site-selection or real-routing claim.
+
+The manuscript includes all figure source data, a reproducibility archive, OpenDSS-compatible harmonic files, a Travis 150 greenfield screening workflow and a documented GridDyn/HELICS/OpenDSS dynamic proxy workflow. We believe the work will interest Nature Communications readers working across power systems, power electronics, grid planning and AI infrastructure.
+
+This manuscript is not under consideration elsewhere. The authors declare no competing interests. We have not had prior discussions with a Nature Communications editor about this work.
+
+Sincerely,
+
+Zhengjie Yang and Liang Min
+Stanford University
+"""
+(ROOT/'cover_letter_nature_communications.md').write_text(cover_letter, encoding='utf-8')
+
+def create_tex_pdf_package():
+    pandoc = shutil.which('pandoc')
+    tectonic = shutil.which('tectonic')
+    note = ROOT / 'tex_pdf_build_note.txt'
+    if not pandoc or not tectonic:
+        missing = ', '.join(name for name, path in [('pandoc', pandoc), ('tectonic', tectonic)] if not path)
+        note.write_text(
+            f'TeX/PDF build skipped because the following executable(s) were not found: {missing}.\n',
+            encoding='utf-8',
+        )
+        return None, None, None
+
+    main_md_path = ROOT / 'Direct_current_subtransmission_backbones_for_grid_stable_AI_factories_NComms_v3.md'
+    pdf_md_path = RENDER / 'Direct_current_subtransmission_backbones_for_grid_stable_AI_factories_NComms_v3_with_inline_figures.md'
+    tex_path = ROOT / 'Direct_current_subtransmission_backbones_for_grid_stable_AI_factories_NComms_v3.tex'
+    overleaf_path = ROOT / 'Direct_current_subtransmission_backbones_for_grid_stable_AI_factories_NComms_overleaf.tex'
+
+    figure_after = [
+        ('An AI-native architecture with the AC/DC boundary moved upstream', 'Fig. 1', 'fig1_architecture_formal_v3.png'),
+        ('Efficiency is a design-space result, not a single operating point', 'Fig. 2', 'fig2_efficiency_uncertainty_designspace_v3.png'),
+        ('A DC backbone changes harmonic compliance into harmonic ownership', 'Fig. 3', 'fig3_harmonic_ownership_opendss_screening_v3.png'),
+        ('The DC backbone buffers synchronized AI-load voltage dynamics', 'Fig. 4', 'fig4_voltage_stabilization_averaged_emt_v3.png'),
+        ('Data-center load pockets are becoming planning objects', 'Fig. 5', 'fig5_case_study_voltage_envelope_v3.png'),
+        ('Travis 150 greenfield configurations preserve the three-benefit ordering', 'Fig. 6', 'fig6_travis150_greenfield_benefits_v2.png'),
+    ]
+
+    pdf_md = main_md_path.read_text(encoding='utf-8')
+    for heading, alt, image in figure_after:
+        marker = f'### {heading}\n'
+        start = pdf_md.find(marker)
+        if start == -1:
+            continue
+        search_from = start + len(marker)
+        next_positions = [pos for pos in (pdf_md.find('\n### ', search_from), pdf_md.find('\n## ', search_from)) if pos != -1]
+        end = min(next_positions) if next_positions else len(pdf_md)
+        figure_markdown = f'\n\n![{alt}](figures/{image})\n'
+        if figure_markdown.strip() not in pdf_md[start:end]:
+            pdf_md = pdf_md[:end].rstrip() + figure_markdown + pdf_md[end:]
+    pdf_md_path.write_text(pdf_md, encoding='utf-8')
+
+    subprocess.run([
+        pandoc,
+        pdf_md_path.name,
+        '--standalone',
+        '--from', 'markdown',
+        '--to', 'latex',
+        '-V', 'geometry:margin=1in',
+        '-V', 'fontsize=11pt',
+        '-o', tex_path.name,
+    ], cwd=RENDER, check=True)
+
+    generated_tex = RENDER / tex_path.name
+    if generated_tex.exists():
+        shutil.move(generated_tex, tex_path)
+
+    tex = tex_path.read_text(encoding='utf-8')
+    tex = tex.replace(
+        r'\setlength{\emergencystretch}{3em}',
+        r'\setlength{\emergencystretch}{8em}' + '\n' + r'\sloppy',
+    )
+    tex = tex.replace(
+        r'\section{Direct-current subtransmission backbones for grid-stable AI factories}\label{direct-current-subtransmission-backbones-for-grid-stable-ai-factories}',
+        r'{\Large\bfseries\raggedright Direct-current subtransmission backbones for grid-stable AI factories\par}'
+        + '\n'
+        + r'\label{direct-current-subtransmission-backbones-for-grid-stable-ai-factories}'
+        + '\n'
+        + r'\vspace{0.5em}',
+    )
+    tex = tex.replace(
+        '\\section{Direct-current subtransmission backbones for grid-stable AI\n'
+        'factories}\\label{direct-current-subtransmission-backbones-for-grid-stable-ai-factories}',
+        r'{\Large\bfseries\raggedright Direct-current subtransmission backbones for grid-stable AI factories\par}'
+        + '\n'
+        + r'\label{direct-current-subtransmission-backbones-for-grid-stable-ai-factories}'
+        + '\n'
+        + r'\vspace{0.5em}',
+    )
+    tex = tex.replace('../figures/', 'figures/')
+    tex_path.write_text(tex, encoding='utf-8')
+    overleaf_path.write_text(tex, encoding='utf-8')
+
+    subprocess.run([
+        tectonic,
+        '--keep-logs',
+        tex_path.name,
+    ], cwd=ROOT, check=True)
+
+    note.write_text(
+        'TeX and PDF were generated with pandoc and tectonic from the manuscript markdown with inline figures.\n',
+        encoding='utf-8',
+    )
+    return tex_path, overleaf_path, tex_path.with_suffix('.pdf')
+
+tex_path, overleaf_path, pdf_path = create_tex_pdf_package()
 
 # ---------------------------- Public repository ----------------------------
 # Copy data, figures, OpenDSS files to repo
@@ -1629,6 +1838,10 @@ repo_zip=ROOT/'public_code_repo_DOI_ready.zip'
 with zipfile.ZipFile(repo_zip,'w',zipfile.ZIP_DEFLATED) as z:
     for f in REPO.rglob('*'):
         z.write(f, f.relative_to(REPO.parent))
+submission_zip=ROOT.parent/'submission_package.zip'
+with zipfile.ZipFile(submission_zip,'w',zipfile.ZIP_DEFLATED) as z:
+    for f in ROOT.rglob('*'):
+        z.write(f, f.relative_to(ROOT.parent))
 full_zip=ROOT.parent/'DC_backbone_AI_factories_NComms_v3_full_package.zip'
 with zipfile.ZipFile(full_zip,'w',zipfile.ZIP_DEFLATED) as z:
     for f in ROOT.rglob('*'):
@@ -1636,5 +1849,10 @@ with zipfile.ZipFile(full_zip,'w',zipfile.ZIP_DEFLATED) as z:
 
 print('MAIN_DOCX', main_docx)
 print('SUPP_DOCX', supp_docx)
+if pdf_path:
+    print('MAIN_PDF', pdf_path)
+if tex_path:
+    print('MAIN_TEX', tex_path)
 print('REPO_ZIP', repo_zip)
+print('SUBMISSION_ZIP', submission_zip)
 print('FULL_ZIP', full_zip)
