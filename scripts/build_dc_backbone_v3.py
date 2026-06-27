@@ -1669,6 +1669,32 @@ Stanford University
 """
 (ROOT/'cover_letter_nature_communications.md').write_text(cover_letter, encoding='utf-8')
 
+def rewrite_pdf_for_reader_compatibility(pdf_path):
+    """Rewrite PDF objects to avoid reader-specific blank-page rendering issues."""
+
+    if pdf_path is None or not Path(pdf_path).exists():
+        return pdf_path
+    try:
+        from PyPDF2 import PdfReader, PdfWriter
+    except Exception as exc:
+        note = Path(pdf_path).with_suffix('.pdf_rewrite_note.txt')
+        note.write_text(
+            f'PDF compatibility rewrite skipped because PyPDF2 was unavailable: {exc}\n',
+            encoding='utf-8',
+        )
+        return pdf_path
+
+    pdf_path = Path(pdf_path)
+    tmp_path = pdf_path.with_suffix('.rewrite_tmp.pdf')
+    reader = PdfReader(str(pdf_path))
+    writer = PdfWriter()
+    for page in reader.pages:
+        writer.add_page(page)
+    with tmp_path.open('wb') as f:
+        writer.write(f)
+    tmp_path.replace(pdf_path)
+    return pdf_path
+
 def create_tex_pdf_package():
     pandoc = shutil.which('pandoc')
     tectonic = shutil.which('tectonic')
@@ -1755,12 +1781,13 @@ def create_tex_pdf_package():
         '--keep-logs',
         tex_path.name,
     ], cwd=ROOT, check=True)
+    pdf_out = rewrite_pdf_for_reader_compatibility(tex_path.with_suffix('.pdf'))
 
     note.write_text(
-        'TeX and PDF were generated with pandoc and tectonic from the manuscript markdown with inline figures.\n',
+        'TeX and PDF were generated with pandoc and tectonic from the manuscript markdown with inline figures. The PDF was rewritten with PyPDF2 for reader compatibility.\n',
         encoding='utf-8',
     )
-    return tex_path, overleaf_path, tex_path.with_suffix('.pdf')
+    return tex_path, overleaf_path, pdf_out
 
 def create_supplementary_pdf_package():
     pandoc = shutil.which('pandoc')
@@ -1800,12 +1827,13 @@ def create_supplementary_pdf_package():
         '--keep-logs',
         supp_tex_path.name,
     ], cwd=SUPP, check=True)
+    supp_pdf_out = rewrite_pdf_for_reader_compatibility(supp_tex_path.with_suffix('.pdf'))
 
     note.write_text(
-        'Supplementary TeX and PDF were generated with pandoc and tectonic from the supplementary markdown with inline figures.\n',
+        'Supplementary TeX and PDF were generated with pandoc and tectonic from the supplementary markdown with inline figures. The PDF was rewritten with PyPDF2 for reader compatibility.\n',
         encoding='utf-8',
     )
-    return supp_tex_path, supp_tex_path.with_suffix('.pdf')
+    return supp_tex_path, supp_pdf_out
 
 tex_path, overleaf_path, pdf_path = create_tex_pdf_package()
 supp_tex_path, supp_pdf_path = create_supplementary_pdf_package()
