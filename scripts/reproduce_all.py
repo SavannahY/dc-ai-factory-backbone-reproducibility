@@ -163,7 +163,7 @@ def figure3():
     ax.grid(axis="y", alpha=0.25)
 
     fig.tight_layout()
-    savefig(fig, "fig3_harmonic_ownership_opendss_screening")
+    savefig(fig, "harmonic_ownership_opendss_screening")
 
 
 def figure5():
@@ -228,7 +228,7 @@ def figure5():
     ax.grid(alpha=0.22)
 
     fig.tight_layout()
-    savefig(fig, "fig5_case_study_voltage_envelope")
+    savefig(fig, "load_pocket_voltage_envelope")
 
 
 def main():

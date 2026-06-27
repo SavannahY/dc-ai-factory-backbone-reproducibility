@@ -60,14 +60,14 @@ redistributed through GitHub.
 
 | Manuscript item | Figure file | Main data files |
 | --- | --- | --- |
-| Fig. 1: delivery architectures | `figures/Figure_1_architecture.png` | supplied architecture diagram used consistently in Word, TeX and PDF |
-| Fig. 2: useful transfer capacity | `figures/fig2_transfer_capacity_loss_designspace.{png,svg}` | `transfer_capacity_reference_case_v3.csv`, `transfer_capacity_uncertainty_reference_v3.csv`, `transfer_capacity_design_space_v3.csv`, `transfer_capacity_sensitivity_v3.csv` |
-| Fig. 3: harmonic ownership | `figures/fig3_harmonic_ownership_opendss_screening.{png,svg}` | `harmonic_thdv_monte_carlo_v3.csv`, `harmonic_individual_p95_v3.csv`, `true_opendss_harmonic_thdv_monte_carlo_v3.csv` |
-| Fig. 4: GridPACK voltage ride-through | `figures/fig4_voltage_control_turbulence_gridpack.{png,svg}` | `gridpack_voltage_turbulence_event_sweep_v3.csv`, `gridpack_voltage_control_event_response_v3.csv`, `gridpack_voltage_control_summary_v3.csv` |
-| Fig. 5: load-pocket context | `figures/fig5_case_study_voltage_envelope.{png,svg}` | `cost_copper_envelope_v3.csv`, `assumption_provenance_table_v3.csv` |
-| Fig. 6: Travis 150 validation | `figures/fig6_travis150_greenfield_benefits.{png,svg,pdf}` | `travis150_greenfield_c1_c2_c3_summary_v2.csv`, `event_sweep_summary_compact.csv`, `gridpack_poi_voltage_event_*.csv` |
+| Fig. 1: delivery architectures | `figures/ai_factory_delivery_architectures.png` | supplied architecture diagram used consistently in Word, TeX and PDF |
+| Fig. 2: useful transfer capacity | `figures/transfer_capacity_loss_designspace.{png,svg}` | `transfer_capacity_reference_case_v3.csv`, `transfer_capacity_uncertainty_reference_v3.csv`, `transfer_capacity_design_space_v3.csv`, `transfer_capacity_sensitivity_v3.csv` |
+| Fig. 3: harmonic ownership | `figures/harmonic_ownership_opendss_screening.{png,svg}` | `harmonic_thdv_monte_carlo_v3.csv`, `harmonic_individual_p95_v3.csv`, `true_opendss_harmonic_thdv_monte_carlo_v3.csv` |
+| Fig. 4: GridPACK voltage ride-through | `figures/gridpack_voltage_ride_through.{png,svg}` | `gridpack_voltage_turbulence_event_sweep_v3.csv`, `gridpack_voltage_control_event_response_v3.csv`, `gridpack_voltage_control_summary_v3.csv` |
+| Fig. 5: load-pocket context | `figures/load_pocket_voltage_envelope.{png,svg}` | `cost_copper_envelope_v3.csv`, `assumption_provenance_table_v3.csv` |
+| Fig. 6: Travis 150 validation | `figures/travis150_greenfield_benefits.{png,svg,pdf}` | `travis150_greenfield_c1_c2_c3_summary_v2.csv`, `event_sweep_summary_compact.csv`, `gridpack_poi_voltage_event_*.csv` |
 | Austin/Travis greenfield data-center configurations | `docs/travis150_greenfield_data_center_config_study.md` | `travis150_greenfield_c1_c2_c3_transfer_v2.csv`, `travis150_greenfield_c1_c2_c3_harmonics_v2.csv`, `travis150_greenfield_c1_c2_c3_voltage_v2.csv`, `travis150_greenfield_c1_c2_c3_summary_v2.csv` |
-| Supplementary Figs. S1-S4 | `figures/supp_fig_s*.{png,svg}` | fault-protection, EMT-validation, buffer-feasibility and cost/copper CSVs |
+| Supplementary Figs. S1-S4 | `figures/{dc_fault_protection_dynamic,averaged_emt_validation,shared_buffer_feasibility,cost_copper_envelope}.{png,svg}` | fault-protection, EMT-validation, buffer-feasibility and cost/copper CSVs |
 
 The final figure provenance is summarized in
 `docs/figure_provenance.md`. No final figure in this reproducibility package is
@@ -153,12 +153,12 @@ and `data/true_opendss_*`, so OpenDSS is not required for the smoke tests.
 
 For a quick scientific review, start with:
 
-1. `figures/Figure_1_architecture.png` for the architectural claim.
-2. `figures/fig2_transfer_capacity_loss_designspace.png` for useful transfer
+1. `figures/ai_factory_delivery_architectures.png` for the architectural claim.
+2. `figures/transfer_capacity_loss_designspace.png` for useful transfer
    capacity, loss reduction and uncertainty.
-3. `figures/fig3_harmonic_ownership_opendss_screening.png` for harmonic
+3. `figures/harmonic_ownership_opendss_screening.png` for harmonic
    ownership.
-4. `figures/fig4_voltage_control_turbulence_gridpack.png` for GridPACK
+4. `figures/gridpack_voltage_ride_through.png` for GridPACK
    voltage ride-through.
 5. `tests/test_reproduction_outputs.py` for the core falsifiable relationships.
 6. `docs/reproduction.md` for a concise reproduction guide.

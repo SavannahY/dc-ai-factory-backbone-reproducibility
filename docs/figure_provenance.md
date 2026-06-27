@@ -22,13 +22,13 @@ and the six `gridpack_poi_voltage_event_*.csv` bus-150 POI traces.
 
 Final figure files:
 
-- Fig. 1: `figures/Figure_1_architecture.png`
-- Fig. 2: `figures/fig2_transfer_capacity_loss_designspace.{png,svg}`
-- Fig. 3: `figures/fig3_harmonic_ownership_opendss_screening.{png,svg}`
-- Fig. 4: `figures/fig4_voltage_control_turbulence_gridpack.{png,svg}`
-- Fig. 5: `figures/fig5_case_study_voltage_envelope.{png,svg}`
-- Fig. 6: `figures/fig6_travis150_greenfield_benefits.{png,svg,pdf}`
-- Supplementary Fig. S1: `figures/supp_fig_s1_dc_fault_protection_dynamic.{png,svg}`
-- Supplementary Fig. S2: `figures/supp_fig_s2_averaged_emt_validation.{png,svg}`
-- Supplementary Fig. S3: `figures/supp_fig_s3_buffer_feasibility.{png,svg}`
-- Supplementary Fig. S4: `figures/supp_fig_s4_cost_copper_envelope.{png,svg}`
+- Fig. 1: `figures/ai_factory_delivery_architectures.png`
+- Fig. 2: `figures/transfer_capacity_loss_designspace.{png,svg}`
+- Fig. 3: `figures/harmonic_ownership_opendss_screening.{png,svg}`
+- Fig. 4: `figures/gridpack_voltage_ride_through.{png,svg}`
+- Fig. 5: `figures/load_pocket_voltage_envelope.{png,svg}`
+- Fig. 6: `figures/travis150_greenfield_benefits.{png,svg,pdf}`
+- Supplementary Fig. S1: `figures/dc_fault_protection_dynamic.{png,svg}`
+- Supplementary Fig. S2: `figures/averaged_emt_validation.{png,svg}`
+- Supplementary Fig. S3: `figures/shared_buffer_feasibility.{png,svg}`
+- Supplementary Fig. S4: `figures/cost_copper_envelope.{png,svg}`
