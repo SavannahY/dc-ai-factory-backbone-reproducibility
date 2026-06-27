@@ -1423,11 +1423,19 @@ See data/assumption_provenance_table_v3.csv.
 # Supplementary Figure captions
 **Supplementary Fig. S1 | Protection screening.** Representative protection zones and dynamic response to a backbone pole-to-ground fault. The sequence includes detection, current limiting, breaker opening, section isolation and healthy-campus ride-through.
 
+![Protection screening and DC fault response](../figures/dc_fault_protection_dynamic.png)
+
 **Supplementary Fig. S2 | Dynamic-screen checks.** Time-step convergence and first-order transfer-function validation for the supplemental grid-command model.
+
+![Averaged EMT model validation](../figures/averaged_emt_validation.png)
 
 **Supplementary Fig. S3 | Shared-buffer interpretation.** Candidate technologies and deployment layers for high-power, low-energy buffering.
 
+![Shared buffer feasibility layers](../figures/shared_buffer_feasibility.png)
+
 **Supplementary Fig. S4 | Cost and conductor envelope.** Annual value of loss reduction under electricity-price and load-factor sweeps, and a current-length index for corridor conductor burden.
+
+![Cost and conductor envelope](../figures/cost_copper_envelope.png)
 """
 (SUPP/'Supplementary_Information_NComms_2026-06-26.md').write_text(supp_md)
 
@@ -1679,16 +1687,16 @@ def create_tex_pdf_package():
     overleaf_path = ROOT / 'Direct_current_subtransmission_backbones_for_AI_factories_NComms_overleaf.tex'
 
     figure_after = [
-        ('An AI-native architecture with the AC/DC boundary moved upstream', 'Fig. 1', 'ai_factory_delivery_architectures.png'),
-        ('Transfer capacity is coupled to loss reduction', 'Fig. 2', 'transfer_capacity_loss_designspace.png'),
-        ('A DC backbone changes harmonic compliance into harmonic ownership', 'Fig. 3', 'harmonic_ownership_opendss_screening.png'),
-        ('The DC backbone buffers voltage turbulence at a controllable boundary', 'Fig. 4', 'gridpack_voltage_ride_through.png'),
-        ('Data-center load pockets are becoming planning objects', 'Fig. 5', 'load_pocket_voltage_envelope.png'),
-        ('Travis 150 greenfield configurations preserve the three-benefit ordering', 'Fig. 6', 'travis150_greenfield_benefits.png'),
+        ('An AI-native architecture with the AC/DC boundary moved upstream', 'AI-factory delivery architectures', 'ai_factory_delivery_architectures.png'),
+        ('Transfer capacity is coupled to loss reduction', 'Transfer capacity and loss design space', 'transfer_capacity_loss_designspace.png'),
+        ('A DC backbone changes harmonic compliance into harmonic ownership', 'Harmonic ownership at the AC grid interface', 'harmonic_ownership_opendss_screening.png'),
+        ('The DC backbone buffers voltage turbulence at a controllable boundary', 'GridPACK voltage ride-through under transmission faults', 'gridpack_voltage_ride_through.png'),
+        ('Data-center load pockets are becoming planning objects', 'Load-pocket voltage and conductor context', 'load_pocket_voltage_envelope.png'),
+        ('Travis 150 greenfield configurations preserve the three-benefit ordering', 'Travis 150 greenfield validation of C1-C3 ordering', 'travis150_greenfield_benefits.png'),
     ]
 
     pdf_md = main_md_path.read_text(encoding='utf-8')
-    for heading, alt, image in figure_after:
+    for heading, caption, image in figure_after:
         marker = f'### {heading}\n'
         start = pdf_md.find(marker)
         if start == -1:
@@ -1696,7 +1704,7 @@ def create_tex_pdf_package():
         search_from = start + len(marker)
         next_positions = [pos for pos in (pdf_md.find('\n### ', search_from), pdf_md.find('\n## ', search_from)) if pos != -1]
         end = min(next_positions) if next_positions else len(pdf_md)
-        figure_markdown = f'\n\n![{alt}](figures/{image})\n'
+        figure_markdown = f'\n\n![{caption}](figures/{image})\n'
         if figure_markdown.strip() not in pdf_md[start:end]:
             pdf_md = pdf_md[:end].rstrip() + figure_markdown + pdf_md[end:]
     pdf_md_path.write_text(pdf_md, encoding='utf-8')
@@ -1754,7 +1762,53 @@ def create_tex_pdf_package():
     )
     return tex_path, overleaf_path, tex_path.with_suffix('.pdf')
 
+def create_supplementary_pdf_package():
+    pandoc = shutil.which('pandoc')
+    tectonic = shutil.which('tectonic')
+    note = ROOT / 'supplementary_pdf_build_note.txt'
+    if not pandoc or not tectonic:
+        missing = ', '.join(name for name, path in [('pandoc', pandoc), ('tectonic', tectonic)] if not path)
+        note.write_text(
+            f'Supplementary TeX/PDF build skipped because the following executable(s) were not found: {missing}.\n',
+            encoding='utf-8',
+        )
+        return None, None
+
+    supp_md_path = SUPP / 'Supplementary_Information_NComms_2026-06-26.md'
+    supp_tex_path = SUPP / 'Supplementary_Information_NComms_2026-06-26.tex'
+
+    subprocess.run([
+        pandoc,
+        supp_md_path.name,
+        '--standalone',
+        '--from', 'markdown',
+        '--to', 'latex',
+        '-V', 'geometry:margin=1in',
+        '-V', 'fontsize=11pt',
+        '-o', supp_tex_path.name,
+    ], cwd=SUPP, check=True)
+
+    tex = supp_tex_path.read_text(encoding='utf-8')
+    tex = tex.replace(
+        r'\setlength{\emergencystretch}{3em}',
+        r'\setlength{\emergencystretch}{8em}' + '\n' + r'\sloppy',
+    )
+    supp_tex_path.write_text(tex, encoding='utf-8')
+
+    subprocess.run([
+        tectonic,
+        '--keep-logs',
+        supp_tex_path.name,
+    ], cwd=SUPP, check=True)
+
+    note.write_text(
+        'Supplementary TeX and PDF were generated with pandoc and tectonic from the supplementary markdown with inline figures.\n',
+        encoding='utf-8',
+    )
+    return supp_tex_path, supp_tex_path.with_suffix('.pdf')
+
 tex_path, overleaf_path, pdf_path = create_tex_pdf_package()
+supp_tex_path, supp_pdf_path = create_supplementary_pdf_package()
 
 # ---------------------------- Public repository ----------------------------
 # Copy data, figures, OpenDSS files to repo
@@ -2038,7 +2092,7 @@ with zipfile.ZipFile(repo_zip,'w',zipfile.ZIP_DEFLATED) as z:
 for generated_dir in [DATA, CODE, RENDER, OPENDSS, REPO]:
     if generated_dir.exists():
         shutil.rmtree(generated_dir)
-for generated_file in [ROOT/'tex_pdf_build_note.txt', ROOT/'source_data_csv.zip']:
+for generated_file in [ROOT/'tex_pdf_build_note.txt', ROOT/'supplementary_pdf_build_note.txt', ROOT/'source_data_csv.zip']:
     if generated_file.exists():
         generated_file.unlink()
 
@@ -2049,6 +2103,8 @@ with zipfile.ZipFile(submission_zip,'w',zipfile.ZIP_DEFLATED) as z:
 
 print('MAIN_DOCX', main_docx)
 print('SUPP_DOCX', supp_docx)
+if supp_pdf_path:
+    print('SUPP_PDF', supp_pdf_path)
 if pdf_path:
     print('MAIN_PDF', pdf_path)
 if tex_path:
