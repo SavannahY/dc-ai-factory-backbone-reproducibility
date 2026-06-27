@@ -1,7 +1,0 @@
-case,architecture,max_useful_transfer_mw,binding_constraint,note
-same ROW current envelope,Traditional AC,1253.7577229434964,thermal_current_limit,Closed-form useful MW at the 800 VDC boundary for 5.5 kA corridor current.
-same ROW current envelope,Subtransmission DC backbone,1496.820864,thermal_current_or_converter_limit,Closed-form useful MW at the 800 VDC boundary for the same 5.5 kA corridor current.
-AC loadability screen,Traditional AC,1130.0,reactive_power_limit,Two-bus AC screen with voltage and source-Mvar limits; current limit relaxed to expose non-thermal constraints.
-AC transient stability screen,Traditional AC,1355.0,transient_stability_limit,Classical equal-area screen with 100 ms minimum critical clearing time; current limit relaxed to expose stability constraints.
-same high-ampacity ROW current envelope,Traditional AC,1595.6916473826318,thermal_current_limit,Closed-form thermal-only AC limit for the same 7.0 kA current used in the non-thermal screens.
-same high-ampacity ROW current envelope,Subtransmission DC backbone,1905.044736,thermal_current_or_converter_limit,Closed-form thermal-only DC limit for the same 7.0 kA current used in the non-thermal screens.

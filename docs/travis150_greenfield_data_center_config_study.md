@@ -8,9 +8,9 @@ test case corresponding to the Austin-Travis County T&D system and notes
 that it is synthetic rather than an actual grid:
 https://electricgrids.engr.tamu.edu/synthetic-gas-electric-test-case-for-the-travis-150-system/
 
-HELICS is the intended T&D coupling layer because its tool list includes
-OpenDSS/OpenDSSDirect.py/PyDSS for distribution simulation and GridDyn
-for transmission simulation: https://helics.org/tools/
+HELICS is the intended T&D coupling layer. The updated transmission path uses
+GridPACK with the real Travis 150 RAW/DYR files, and the distribution side uses
+OpenDSS/OpenDSSDirect.py/PyDSS.
 
 ## Configuration
 
@@ -40,13 +40,16 @@ C3 raises the useful transfer limit from 1173.60 MW
 for C1 to 1441.41 MW for the new DC corridor. At
 the same 1 GW data-center load, C3 centralizes AC harmonic ownership at
 one grid-facing converter terminal and keeps the data-center load served
-through the repeated voltage-sag screen.
+through the archived GridPACK/HELICS/OpenDSS branch-fault event sweep.
 
-The voltage output is a HELICS-compatible proxy screen unless a true
-Travis 150 GridDyn dynamic case is supplied. It preserves the intended
-federate roles: GridDyn publishes transmission POI voltage, OpenDSS
-receives the POI voltage for the data-center feeder, and the controller
-federate applies C2 local VAR or C3 centralized AC/DC-terminal support.
+The voltage output is now wired for a GridPACK/HELICS/OpenDSS workflow using
+`Travis150-updated/150.RAW` and
+`Travis150-updated/150_gridpack_REECA1_candidate.dyr`. The manuscript sweep
+uses six shifted 3 s branch-fault simulations on the 137-150 transmission
+branch, bus 150 as the POI voltage observation, and 20 ms POI-voltage exchange
+to the OpenDSS data-center feeder. The compact event-sweep result reports a
+lowest POI minimum of 0.091994 pu: C1 and C2 trip, while C3 keeps the modeled
+800 VDC load boundary served.
 
 ## Output Files
 
@@ -54,10 +57,12 @@ federate applies C2 local VAR or C3 centralized AC/DC-terminal support.
 - `data/travis150_greenfield_c1_c2_c3_harmonics_v2.csv`
 - `data/travis150_greenfield_c1_c2_c3_voltage_v2.csv`
 - `data/travis150_greenfield_c1_c2_c3_summary_v2.csv`
+- `cosim/gridpack_td_dynamic_var/results_event_sweep/event_sweep_summary_compact.csv`
+- `cosim/gridpack_td_dynamic_var/results_event_sweep/gridpack_poi_voltage_event_*.csv`
 
 ## Limitations
 
-This run used the supplied Travis electric case for corridor siting and electrical context, while the dynamic voltage result remains a HELICS-compatible proxy screen.
-A utility-grade result should rerun the same scenarios with a validated
-Travis 150 GridDyn dynamic model and an OpenDSS feeder tied through
-HELICS.
+This run used the supplied Travis electric case for corridor siting and
+electrical context. A utility-grade result should rerun the same scenarios with
+a site-specific validated dynamic case, detailed protection settings,
+production converter controls and a feeder model tied through HELICS.

@@ -1,21 +1,22 @@
 #!/usr/bin/env python
-"""Run the GridDyn-to-OpenDSS HELICS dynamic VAR study.
+"""Run the legacy GridDyn-to-OpenDSS HELICS dynamic VAR fallback.
 
 The executable path is intentionally explicit:
 
-1. Build a GridDyn dynamic case or a Travis-derived proxy case.
-2. Run GridDyn and obtain the transmission POI voltage channel or documented
-   proxy sag waveform.
+1. Build a Travis-derived GridDyn fallback case or consume a user-supplied
+   GridDyn case/recorder for audit.
+2. Run GridDyn to validate the fallback topology or reuse the retained sag
+   waveform.
 3. Exchange that voltage through HELICS with an OpenDSS distribution feeder and
    a dynamic VAR controller federate.
 4. Write per-time-step and summary results for C1, C2 and C3.
 
-If an IEEE 118-bus or Texas A&M 150-bus dynamic GridDyn case is available, pass
-it through ``--griddyn-case`` and ``--poi-voltage-field``. If only the Travis
-150 electric AUX case is available, pass ``--travis-case`` to generate a
-documented two-bus GridDyn proxy from the selected Travis corridor. If neither
-is supplied, the executable smoke test uses GridDyn's bundled IEEE 39 dynamic
-case.
+The primary Travis 150 transmission-dynamic path is GridPACK, implemented in
+``scripts/run_gridpack_td_dynamic_var.py``. This runner is kept as the earlier
+HELICS/OpenDSS fallback path. If only the Travis 150 electric AUX case is
+available, pass ``--travis-case`` to generate a documented two-bus GridDyn
+fallback case from the selected Travis corridor. If neither is supplied, the
+executable smoke test uses GridDyn's bundled IEEE 39 example.
 """
 
 from __future__ import annotations
@@ -111,7 +112,7 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help=(
-            "Optional existing GridDyn dynamic case. If omitted, the script writes a repeated-fault "
+            "Optional existing GridDyn case or audit fixture. If omitted, the script writes a repeated-fault "
             "Travis 150 proxy when --travis-case is supplied, otherwise an IEEE 39 GridDyn wrapper "
             "using --griddyn-ieee39-dir."
         ),
@@ -123,7 +124,7 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Optional Travis 150 electric case, normally Travis150_Electric_Data.aux. When supplied "
             "without --griddyn-case, the runner writes a documented GridDyn-compatible two-bus "
-            "dynamic proxy using the selected Travis corridor."
+            "proxy using the selected Travis corridor."
         ),
     )
     parser.add_argument(
@@ -135,13 +136,13 @@ def parse_args() -> argparse.Namespace:
         "--travis-proxy-load-mw",
         type=float,
         default=1000.0,
-        help="Incremental data-center load represented in the generated Travis GridDyn proxy.",
+        help="Incremental data-center load represented in the generated Travis GridDyn fallback case.",
     )
     parser.add_argument(
         "--griddyn-ieee39-dir",
         type=Path,
         default=DEFAULT_GRIDDYN_IEEE39_DIR,
-        help="Directory containing IEEE39.raw and IEEE39.dyr for the default GridDyn dynamic demo.",
+        help="Directory containing IEEE39.raw and IEEE39.dyr for the default GridDyn smoke demo.",
     )
     parser.add_argument(
         "--poi-voltage-field",
@@ -371,8 +372,8 @@ def write_travis150_proxy_griddyn_case(
         "    Travis 150 dynamic proxy generated from the electric-side corridor screen.",
         "    This is not the full TAMU Travis 150 dynamic model. The AUX case supplies",
         "    corridor voltage, impedance, length and source/load labels. The",
-        "    event-inspired sag train is applied as the HELICS POI voltage series",
-        "    after GridDyn validates this executable proxy topology.",
+        "    retained sag train is applied as the HELICS POI voltage series",
+        "    after GridDyn validates this executable fallback topology.",
         f"    Source case: {travis_case}",
         f"    Corridor source: {source}",
         f"    Selected span: {corridor.source_bus} -> {corridor.load_bus}",
@@ -792,9 +793,9 @@ def build_plan(args: argparse.Namespace, griddyn_path: str | None, recorder_csv:
         "scenario_aliases": SCENARIO_ALIASES,
         "executed": False,
         "note": (
-            "When --travis-case is supplied, the script generates a Travis-derived GridDyn dynamic proxy "
-            "and labels the three data-center configurations as C1/C2/C3. Pass --griddyn-case for a full "
-            "IEEE 118 or Texas A&M 150-bus dynamic GridDyn case when available."
+            "When --travis-case is supplied, the script generates a Travis-derived GridDyn fallback case "
+            "and labels the three data-center configurations as C1/C2/C3. The primary Travis 150 "
+            "transmission-dynamic workflow is scripts/run_gridpack_td_dynamic_var.py."
         ),
     }
 

@@ -1,3 +1,0 @@
-dataset_id,role,dataset,transmission_runner,distribution_runner,source_used
-A,main,Texas A&M Full Texas Combined T&D,MATPOWER-compatible AC steady-state screening; no PowerWorld/PSS/E required,OpenDSS feeder validation only,matpower:external_data/tamu_texas_td/transmission/Texas7k_20210804.m
-B,validation,Texas A&M 150-bus T&D / Austin-Travis,same C0/C1/C2/C3 screening interface; no PowerWorld/PSS/E required,OpenDSS selected-feeder validation,archived validation catalog

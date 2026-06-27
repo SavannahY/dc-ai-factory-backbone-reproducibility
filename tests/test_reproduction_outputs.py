@@ -3,8 +3,13 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 
-def test_efficiency_reference_case_ordering():
-    df = pd.read_csv(ROOT / "data" / "efficiency_reference_case_v3.csv", index_col=0)
+def test_transfer_capacity_reference_case_ordering():
+    df = pd.read_csv(ROOT / "data" / "transfer_capacity_reference_case_v3.csv", index_col=0)
+    assert (
+        df.loc["Subtransmission DC backbone", "transfer_gain_vs_traditional_MW"]
+        > df.loc["Local SST", "transfer_gain_vs_traditional_MW"]
+        > df.loc["Traditional AC", "transfer_gain_vs_traditional_MW"]
+    )
     assert df.loc["Subtransmission DC backbone", "eff"] > df.loc["Traditional AC", "eff"]
     assert df.loc["Local SST", "eff"] > df.loc["Traditional AC", "eff"]
 

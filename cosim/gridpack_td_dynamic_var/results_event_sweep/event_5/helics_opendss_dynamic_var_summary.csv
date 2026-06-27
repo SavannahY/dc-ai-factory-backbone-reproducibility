@@ -1,0 +1,4 @@
+scenario,legacy_scenario,architecture,control_mode,samples,poi_min_voltage_pu,poi_min_time_s,datacenter_min_ac_voltage_pu,datacenter_min_ac_time_s,load_boundary,load_boundary_nominal_voltage_v,load_boundary_min_voltage_pu,load_boundary_min_time_s,min_load_served_fraction,max_local_q_kvar,max_central_q_kvar,ac_voltage_trip_flag,data_center_tripped,all_opendss_solves_converged
+C1,baseline,traditional_ac_480v,baseline,150,0.09359132,1.04,0.09022692273281463,1.04,480 V AC facility distribution,480.0,0.09022692273281463,1.04,0.0,0.0,0.0,True,True,True
+C2,local_34p5kv,ac_corridor_sst_800vdc,local_34p5kv,150,0.09359132,1.04,0.09258346169601464,1.02,800 V DC SST output,800.0,0.09258346169601464,1.02,0.0,120000.0,0.0,True,True,True
+C3,central_138kv,bipolar_dc_corridor_800vdc,central_138kv,150,0.09359132,1.04,0.09258346169601464,1.02,800 V DC corridor output,800.0,1.0,0.0,1.0,0.0,120000.0,True,False,True

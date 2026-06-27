@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
-FIG = ROOT / "figures"
+FIG = ROOT / "reproduced" / "figures"
 DATA.mkdir(exist_ok=True)
 FIG.mkdir(exist_ok=True)
 
@@ -227,49 +227,6 @@ def savefig(fig, name):
     plt.close(fig)
 
 
-def make_main_two_panel():
-    thd = pd.read_csv(DATA / "harmonic_thdv_monte_carlo_v3.csv")
-    spec = pd.read_csv(DATA / "harmonic_individual_p95_v3.csv")
-    thd = thd[thd["scenario"].isin(ARCH_ORDER)]
-    spec = spec[spec["scenario"].isin(ARCH_ORDER)]
-
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.2), gridspec_kw={"width_ratios": [0.9, 1.35]})
-    ax = axes[0]
-    p95 = thd.groupby("scenario")["thdv_pct"].quantile(0.95).reindex(ARCH_ORDER)
-    y = np.arange(len(ARCH_ORDER))
-    ax.barh(y, p95.values, color=[COLORS[a] for a in ARCH_ORDER], alpha=0.88)
-    for yi, arch in enumerate(ARCH_ORDER):
-        ax.text(p95.loc[arch] + 0.06, yi, f"p95 {p95.loc[arch]:.2f}", va="center", fontsize=7, color=COLORS[arch])
-    ax.axvline(5, color="0.35", ls="--", lw=1.0)
-    ax.text(5.02, 2.35, "5% guide", fontsize=7, va="top", color="0.35")
-    ax.set_yticks(y)
-    ax.set_yticklabels([SHORT[a] for a in ARCH_ORDER], fontsize=7)
-    ax.set_xlabel("PCC voltage THD (%)")
-    ax.set_xlim(0, 5.55)
-    ax.grid(axis="x", alpha=0.18)
-    ax.set_title("a  p95 harmonic screening", loc="left", fontsize=11, weight="bold")
-
-    ax = axes[1]
-    for arch in ARCH_ORDER:
-        d = spec[spec["scenario"] == arch]
-        ax.plot(
-            d["h"],
-            d["p95_individual_harmonic_voltage_pct"],
-            marker="o",
-            ms=3.5,
-            lw=1.5,
-            color=COLORS[arch],
-            label=SHORT[arch],
-        )
-    ax.set_xlabel("Harmonic order")
-    ax.set_ylabel("95th percentile Vh/V1 (%)")
-    ax.grid(axis="y", alpha=0.16)
-    ax.legend(fontsize=7, frameon=False, loc="upper right")
-    ax.set_title("b  Harmonic orders driving THD", loc="left", fontsize=11, weight="bold")
-    fig.subplots_adjust(left=0.08, right=0.98, bottom=0.16, top=0.88, wspace=0.34)
-    savefig(fig, "fig3_harmonic_two_panel_screening_v3")
-
-
 def make_robustness_figures(grid, wide):
     fig, axes = plt.subplots(2, 2, figsize=(11, 8.2))
 
@@ -374,7 +331,7 @@ def make_robustness_figures(grid, wide):
     ax.set_title("d  Which assumptions change relative conclusion", loc="left", fontsize=11, weight="bold")
 
     fig.subplots_adjust(left=0.08, right=0.98, bottom=0.08, top=0.93, wspace=0.34, hspace=0.36)
-    savefig(fig, "supp_fig_s5_harmonic_robustness_envelope_v3")
+    savefig(fig, "diagnostic_harmonic_robustness_envelope")
 
     fig, axes = plt.subplots(1, 3, figsize=(11, 3.8), sharey=True)
     for ax, phase in zip(axes, ["random", "partial", "coherent"]):
@@ -409,18 +366,17 @@ def make_robustness_figures(grid, wide):
     cb = fig.colorbar(im, ax=axes.ravel().tolist(), fraction=0.025, pad=0.02)
     cb.set_label("DC p95 THD / traditional p95 THD", fontsize=7)
     cb.ax.tick_params(labelsize=6)
-    fig.suptitle("Supplementary Fig. S6 | Source-count and phase-coherence sensitivity", fontsize=11, weight="bold", y=0.98)
-    savefig(fig, "supp_fig_s6_harmonic_sourcecount_phase_sensitivity_v3")
+    fig.suptitle("Diagnostic | Source-count and phase-coherence sensitivity", fontsize=11, weight="bold", y=0.98)
+    savefig(fig, "diagnostic_harmonic_sourcecount_phase_sensitivity")
 
 
 def main():
     grid, spec, inputs, wide, summary = run_grid()
-    make_main_two_panel()
     make_robustness_figures(grid, wide)
     print(f"wrote {len(grid)} architecture scenarios from {len(inputs)} input grid points")
     print(DATA / "harmonic_robustness_scenario_grid_v3.csv")
-    print(FIG / "supp_fig_s5_harmonic_robustness_envelope_v3.png")
-    print(FIG / "supp_fig_s6_harmonic_sourcecount_phase_sensitivity_v3.png")
+    print(FIG / "diagnostic_harmonic_robustness_envelope.png")
+    print(FIG / "diagnostic_harmonic_sourcecount_phase_sensitivity.png")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,132 @@
+{
+  "transmission_backend": "GridPACK",
+  "distribution_backend": "OpenDSSDirect.py",
+  "federation_layer": "HELICS",
+  "gridpack_executable": null,
+  "gridpack_application": "dynamic_simulation_full_y/dsf.x",
+  "gridpack_input_xml": "cosim/gridpack_td_dynamic_var/results_event_sweep/event_5/gridpack_travis150_dynamic_input.xml",
+  "gridpack_case_origin": "travis150_updated_real_raw_dyr",
+  "raw_case": "cosim/gridpack_td_dynamic_var/results_event_sweep/event_5/150.RAW",
+  "dyr_case": "cosim/gridpack_td_dynamic_var/results_event_sweep/event_5/150_gridpack_REECA1_candidate.dyr",
+  "gridpack_watch_csv": "cosim/gridpack_td_dynamic_var/results_event_sweep/event_5/gridpack_travis150_generator_watch.csv",
+  "gridpack_poi_voltage_csv": "cosim/gridpack_td_dynamic_var/results_event_sweep/gridpack_poi_voltage_event_5.csv",
+  "poi_bus": 150,
+  "fault_branch": "137 150",
+  "event_csv": "/Users/zhengjieyang/Library/CloudStorage/Dropbox (5-28-26 21:20)/dc-ai-factory-backbone-reproducibility/cosim/griddyn_td_dynamic_var/eastern_interconnection_2024_voltage_sag_train.csv",
+  "federation_plan": "/Users/zhengjieyang/Library/CloudStorage/Dropbox (5-28-26 21:20)/dc-ai-factory-backbone-reproducibility/cosim/gridpack_td_dynamic_var/helics_federation_plan.json",
+  "output_dir": "cosim/gridpack_td_dynamic_var/results_event_sweep/event_5",
+  "scenarios": [
+    "C1",
+    "C2",
+    "C3"
+  ],
+  "raw_summary": {
+    "bus_count": 168,
+    "generator_count": 39,
+    "online_generator_count": 30,
+    "online_generation_mw": 3307.392,
+    "branch_count": 263,
+    "online_branch_count": 263
+  },
+  "watch_generators": [
+    {
+      "line": 363,
+      "bus": 172,
+      "id": "1",
+      "pg": 212.416,
+      "qg": -5.84,
+      "mbase": 255.6,
+      "status": 1,
+      "kv": 230.0,
+      "name": "Sam Gideon~1"
+    },
+    {
+      "line": 356,
+      "bus": 165,
+      "id": "1",
+      "pg": 205.668,
+      "qg": 62.652,
+      "mbase": 247.48,
+      "status": 1,
+      "kv": 230.0,
+      "name": "Bastrop En~1"
+    },
+    {
+      "line": 357,
+      "bus": 165,
+      "id": "2",
+      "pg": 205.668,
+      "qg": 62.652,
+      "mbase": 247.48,
+      "status": 1,
+      "kv": 230.0,
+      "name": "Bastrop En~1"
+    },
+    {
+      "line": 358,
+      "bus": 165,
+      "id": "3",
+      "pg": 202.883,
+      "qg": 62.652,
+      "mbase": 247.48,
+      "status": 1,
+      "kv": 230.0,
+      "name": "Bastrop En~1"
+    },
+    {
+      "line": 360,
+      "bus": 170,
+      "id": "1",
+      "pg": 197.789,
+      "qg": -14.656,
+      "mbase": 238.0,
+      "status": 1,
+      "kv": 230.0,
+      "name": "Lost Pines~1"
+    },
+    {
+      "line": 361,
+      "bus": 170,
+      "id": "2",
+      "pg": 197.789,
+      "qg": -14.656,
+      "mbase": 238.0,
+      "status": 1,
+      "kv": 230.0,
+      "name": "Lost Pines~1"
+    },
+    {
+      "line": 364,
+      "bus": 172,
+      "id": "2",
+      "pg": 172.242,
+      "qg": -5.84,
+      "mbase": 255.6,
+      "status": 1,
+      "kv": 230.0,
+      "name": "Sam Gideon~1"
+    },
+    {
+      "line": 365,
+      "bus": 172,
+      "id": "3",
+      "pg": 171.687,
+      "qg": -5.84,
+      "mbase": 255.6,
+      "status": 1,
+      "kv": 230.0,
+      "name": "Sam Gideon~1"
+    }
+  ],
+  "executed": true,
+  "note": "Uses the real Travis150-updated RAW/DYR transmission model in GridPACK. If no GridPACK POI voltage CSV is supplied, HELICS uses the documented sag series after GridPACK execution because stock dsf.x does not emit a bus voltage recorder CSV.",
+  "poi_voltage_source": "gridpack_poi_voltage_csv",
+  "timeseries_csv": "cosim/gridpack_td_dynamic_var/results_event_sweep/event_5/helics_opendss_dynamic_var_timeseries.csv",
+  "summary_csv": "cosim/gridpack_td_dynamic_var/results_event_sweep/event_5/helics_opendss_dynamic_var_summary.csv",
+  "poi_voltage_timeseries_csv": "cosim/gridpack_td_dynamic_var/results_event_sweep/event_5/gridpack_poi_voltage_timeseries.csv",
+  "gridpack_voltage_samples": 150,
+  "tool_versions": {
+    "helics": "3.6.1 (2025-02-24)",
+    "opendssdirect": "0.9.4"
+  }
+}

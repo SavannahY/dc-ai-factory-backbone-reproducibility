@@ -84,10 +84,12 @@ def _check_environment(args: argparse.Namespace) -> None:
     except ImportError:
         opendss_state = "missing"
     griddyn_state = "available" if shutil.which("gridDynMain") else "missing"
+    gridpack_state = "available" if shutil.which("dsf.x") else "missing"
     print(f"travis_case: {case_state}")
     print(f"helics_python: {helics_state}")
     print(f"opendssdirect: {opendss_state}")
     print(f"gridDynMain: {griddyn_state}")
+    print(f"GridPACK dsf.x: {gridpack_state}")
 
 
 def _write_markdown(
@@ -140,7 +142,8 @@ def _write_markdown(
     else:
         limitation_source_note = (
             "This run used the supplied Travis electric case for corridor siting and electrical "
-            "context, while the dynamic voltage result remains a HELICS-compatible proxy screen."
+            "context. The dynamic voltage result should be rerun through the GridPACK/HELICS "
+            "path when a POI-voltage recorder or post-processor is available."
         )
 
     lines = [
@@ -154,9 +157,9 @@ def _write_markdown(
         "that it is synthetic rather than an actual grid:",
         "https://electricgrids.engr.tamu.edu/synthetic-gas-electric-test-case-for-the-travis-150-system/",
         "",
-        "HELICS is the intended T&D coupling layer because its tool list includes",
-        "OpenDSS/OpenDSSDirect.py/PyDSS for distribution simulation and GridDyn",
-        "for transmission simulation: https://helics.org/tools/",
+        "HELICS is the intended T&D coupling layer. The transmission-dynamic",
+        "path uses GridPACK with the Travis 150 RAW/DYR case, while the",
+        "distribution side uses OpenDSS/OpenDSSDirect.py/PyDSS.",
         "",
         "## Configuration",
         "",
@@ -184,11 +187,12 @@ def _write_markdown(
         "one grid-facing converter terminal and keeps the data-center load served",
         "through the repeated voltage-sag screen.",
         "",
-        "The voltage output is a HELICS-compatible proxy screen unless a true",
-        "Travis 150 GridDyn dynamic case is supplied. It preserves the intended",
-        "federate roles: GridDyn publishes transmission POI voltage, OpenDSS",
-        "receives the POI voltage for the data-center feeder, and the controller",
-        "federate applies C2 local VAR or C3 centralized AC/DC-terminal support.",
+        "The voltage output is wired for a GridPACK/HELICS/OpenDSS workflow",
+        "using `Travis150-updated/150.RAW` and the GridPACK-ready DYR file.",
+        "GridPACK publishes or post-processes the transmission POI voltage,",
+        "OpenDSS receives that POI voltage for the data-center feeder, and the",
+        "controller federate applies C2 local VAR or C3 centralized",
+        "AC/DC-terminal support.",
         "",
         "## Output Files",
         "",
@@ -201,8 +205,8 @@ def _write_markdown(
         "",
         limitation_source_note,
         "A utility-grade result should rerun the same scenarios with a validated",
-        "Travis 150 GridDyn dynamic model and an OpenDSS feeder tied through",
-        "HELICS.",
+        "GridPACK Travis 150 dynamic case, a POI-voltage recorder or",
+        "post-processor, and an OpenDSS feeder tied through HELICS.",
         "",
     ]
     path.parent.mkdir(parents=True, exist_ok=True)

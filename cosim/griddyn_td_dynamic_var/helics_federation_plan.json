@@ -1,10 +1,10 @@
 {
   "name": "griddyn_opendss_dynamic_var_study",
-  "status": "executed_local_ieee39_dynamic_demo",
+  "status": "executed_legacy_fallback_demo",
   "federation_layer": "HELICS",
   "transmission_federate": {
     "backend": "GridDyn",
-    "case_requirement": "Executed demo uses GridDyn IEEE 39 dynamic data; IEEE 118-bus or Texas A&M 150-bus dynamic GridDyn case can be supplied with --griddyn-case.",
+    "case_requirement": "Executed demo uses a GridDyn-compatible fallback case or audit fixture. The primary Travis 150 transmission-dynamic case is the GridPACK RAW/DYR workflow.",
     "publishes": [
       "<scenario>/transmission/poi_voltage_pu"
     ],
@@ -45,7 +45,7 @@
   },
   "disturbance": {
     "event_csv": "eastern_interconnection_2024_voltage_sag_train.csv",
-    "description": "Six short GridDyn line-fault events over about 82 s. The executed demo POI channel BUS_17:voltage reached 0.325 pu."
+    "description": "Retained sag-train replay for legacy HELICS/OpenDSS coupling tests. The stored Travis fallback run reaches a 0.250 pu HELICS POI minimum and is not used for manuscript Fig. 6."
   },
   "metrics": [
     "minimum_115_138kv_poi_voltage_pu",

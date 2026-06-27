@@ -677,9 +677,9 @@ def run_voltage_screen(corridors: list[CorridorCase], loads_mw: tuple[float, ...
                     | {
                         "study_load_mw": load_mw,
                         "coupling_tool": "HELICS",
-                        "transmission_federate": "GridDyn Travis 150 dynamic proxy",
+                        "transmission_federate": "GridPACK Travis 150 real RAW/DYR case",
                         "distribution_federate": "OpenDSS data-center feeder proxy",
-                        "helics_status": "proxy_screen_outputs; run full co-simulation with supplied Travis GridDyn dynamic case",
+                        "helics_status": "screen_outputs; run scripts/run_gridpack_td_dynamic_var.py for the real Travis 150 GridPACK/HELICS path",
                         "disturbance": "eastern_interconnection_2024_repeated_voltage_sag_screen",
                         "poi_min_voltage_pu": float(np.min(poi_voltage)),
                         "service_34p5kv_min_voltage_pu": float(np.min(service_voltage)),

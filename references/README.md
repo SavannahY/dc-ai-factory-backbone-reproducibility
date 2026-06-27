@@ -1,7 +1,7 @@
 # References Folder
 
 This folder collects the references used by the Nature Communications manuscript
-draft `submission_package/Direct_current_subtransmission_backbones_for_grid_stable_AI_factories_NComms_v3.md`.
+draft `submission_package/Direct_current_subtransmission_backbones_for_AI_factories_NComms_2026-06-26.md`.
 
 Contents:
 

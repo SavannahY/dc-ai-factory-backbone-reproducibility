@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Configuration>
+  <Powerflow>
+    <networkConfiguration> 150.RAW </networkConfiguration>
+    <maxIteration>50</maxIteration>
+    <tolerance>1.0e-6</tolerance>
+    <UseNonLinear>false</UseNonLinear>
+    <UseNewton>false</UseNewton>
+    <LinearSolver>
+      <PETScOptions>
+        -ksp_type richardson
+        -pc_type lu
+        -pc_factor_mat_solver_type superlu_dist
+        -ksp_max_it 1
+      </PETScOptions>
+    </LinearSolver>
+  </Powerflow>
+  <Dynamic_simulation>
+    <generatorParameters> 150_gridpack_REECA1_candidate.dyr </generatorParameters>
+    <simulationTime>114.060000</simulationTime>
+    <timeStep>0.005000</timeStep>
+    <Events>
+      <faultEvent>
+        <beginFault> 30.000000 </beginFault>
+        <endFault> 30.042000 </endFault>
+        <faultBranch> 137 150 </faultBranch>
+        <timeStep> 0.005000 </timeStep>
+      </faultEvent>
+      <faultEvent>
+        <beginFault> 46.400000 </beginFault>
+        <endFault> 46.450000 </endFault>
+        <faultBranch> 137 150 </faultBranch>
+        <timeStep> 0.005000 </timeStep>
+      </faultEvent>
+      <faultEvent>
+        <beginFault> 62.800000 </beginFault>
+        <endFault> 62.866000 </endFault>
+        <faultBranch> 137 150 </faultBranch>
+        <timeStep> 0.005000 </timeStep>
+      </faultEvent>
+      <faultEvent>
+        <beginFault> 79.200000 </beginFault>
+        <endFault> 79.258000 </endFault>
+        <faultBranch> 137 150 </faultBranch>
+        <timeStep> 0.005000 </timeStep>
+      </faultEvent>
+      <faultEvent>
+        <beginFault> 95.600000 </beginFault>
+        <endFault> 95.645000 </endFault>
+        <faultBranch> 137 150 </faultBranch>
+        <timeStep> 0.005000 </timeStep>
+      </faultEvent>
+      <faultEvent>
+        <beginFault> 112.000000 </beginFault>
+        <endFault> 112.060000 </endFault>
+        <faultBranch> 137 150 </faultBranch>
+        <timeStep> 0.005000 </timeStep>
+      </faultEvent>
+    </Events>
+    <reportNonExistingElements>false</reportNonExistingElements>
+    <observations>
+      <observation>
+        <type> bus </type>
+        <busID> 150 </busID>
+      </observation>
+      <observation>
+        <type> generator </type>
+        <busID> 172 </busID>
+        <generatorID> 1 </generatorID>
+      </observation>
+      <observation>
+        <type> generator </type>
+        <busID> 165 </busID>
+        <generatorID> 1 </generatorID>
+      </observation>
+      <observation>
+        <type> generator </type>
+        <busID> 165 </busID>
+        <generatorID> 2 </generatorID>
+      </observation>
+    </observations>
+    <generatorWatch>
+      <generator>
+        <busID> 172 </busID>
+        <generatorID> 1 </generatorID>
+      </generator>
+      <generator>
+        <busID> 165 </busID>
+        <generatorID> 1 </generatorID>
+      </generator>
+      <generator>
+        <busID> 165 </busID>
+        <generatorID> 2 </generatorID>
+      </generator>
+      <generator>
+        <busID> 165 </busID>
+        <generatorID> 3 </generatorID>
+      </generator>
+      <generator>
+        <busID> 170 </busID>
+        <generatorID> 1 </generatorID>
+      </generator>
+      <generator>
+        <busID> 170 </busID>
+        <generatorID> 2 </generatorID>
+      </generator>
+      <generator>
+        <busID> 172 </busID>
+        <generatorID> 2 </generatorID>
+      </generator>
+      <generator>
+        <busID> 172 </busID>
+        <generatorID> 3 </generatorID>
+      </generator>
+    </generatorWatch>
+    <generatorWatchFrequency>1</generatorWatchFrequency>
+    <generatorWatchFileName>gridpack_travis150_generator_watch.csv</generatorWatchFileName>
+    <suppressWatchFiles>false</suppressWatchFiles>
+    <LinearSolver>
+      <SolutionTolerance>1.0E-12</SolutionTolerance>
+      <ForceSerial>true</ForceSerial>
+      <InitialGuessZero>true</InitialGuessZero>
+      <SerialMatrixConstant>true</SerialMatrixConstant>
+      <PETScOptions>
+        -ksp_type richardson
+        -pc_type lu
+        -pc_factor_mat_solver_type superlu_dist
+        -ksp_max_it 1
+      </PETScOptions>
+    </LinearSolver>
+    <LinearMatrixSolver>
+      <Ordering>nd</Ordering>
+      <Package>superlu_dist</Package>
+      <Iterations>1</Iterations>
+      <Fill>5</Fill>
+    </LinearMatrixSolver>
+  </Dynamic_simulation>
+</Configuration>

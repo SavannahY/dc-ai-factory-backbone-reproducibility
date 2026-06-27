@@ -1,9 +1,7 @@
 # HELICS T&D Dynamic VAR Study Protocol
 
-This note defines the proposed follow-on study for voltage-dip ride-through and
-dynamic VAR support. It is a validation protocol for the archived Texas T&D
-C0/C1/C2/C3 screening results, not a completed co-simulation artifact in this
-repository.
+This note records the GridPACK/HELICS/OpenDSS dynamic VAR workflow used for
+the Travis 150 greenfield data-center comparison.
 
 ## Objective
 
@@ -19,16 +17,16 @@ hunting, tap changes and capacitor-bank switching.
 
 ## Co-Simulation Stack
 
-Use HELICS as the federation layer. The HELICS tools showcase lists
-OpenDSS/OpenDSSDirect.py/PyDSS as supported distribution interfaces and GridDyn
-as a supported transmission simulator:
+Use HELICS as the federation layer. The configured repository path uses
+GridPACK as the transmission simulator for the Travis 150 RAW/DYR case, with
+OpenDSS/OpenDSSDirect.py on the distribution side.
 
 - HELICS tools: https://helics.org/tools/
 - PyDSS/OpenDSS interface: https://github.com/NREL/PyDSS
 
 Recommended federates:
 
-- Transmission federate: GridDyn dynamic transmission model.
+- Transmission federate: GridPACK dynamic transmission model.
 - Distribution federate: OpenDSS or PyDSS feeder model representing the data
   center load and local 34.5 kV equipment.
 - Controller federate: local SST dynamic VAR controller, centralized
@@ -41,10 +39,10 @@ Recommended federates:
 
 Use two transmission cases, in this order:
 
-1. IEEE 118-bus in GridDyn for a low-dependency public demonstration of the
-   coupling and control logic.
-2. Texas A&M 150-bus Austin-Travis T&D case for validation against the public
-   Texas add-on used elsewhere in this repository.
+1. Texas A&M 150-bus Austin-Travis transmission case in GridPACK using
+   `Travis150-updated/150.RAW` and `150_gridpack_REECA1_candidate.dyr`.
+2. IEEE 118-bus or another public dynamic case only as a low-dependency
+   coupling and control demonstration.
 
 The OpenDSS side should start from a selected Texas A&M distribution feeder and
 replace or augment the native load with a data-center aggregate:
@@ -56,17 +54,10 @@ replace or augment the native load with a data-center aggregate:
 
 ## Disturbance
 
-Use an event-inspired voltage-sag train based on public summaries of the
-July 10, 2024 Eastern Interconnection voltage-sensitive-load disturbance. The
-Keentel summary describes a 230 kV line equipment failure, six sequential
-faults over about 82 seconds, short fault durations, and voltage depressions in
-the affected area of about 0.25-0.40 pu:
-
-- https://keentelengineering.com/nerc-voltage-sensitive-loads
-
-This study should treat that information as a reference waveform, not an event
-reconstruction. The current archived Python screen uses six short dips spanning
-0.25-0.40 pu and keeps the exact grid model abstract.
+The manuscript evidence uses six shifted GridPACK branch-fault simulations on
+the Travis 150 137-150 branch, with bus 150 as the POI voltage observation.
+The exported 3 s POI traces are passed to the HELICS/OpenDSS data-center
+federation at 20 ms resolution.
 
 ## Cases
 
@@ -137,26 +128,15 @@ the local case improves the data-center service voltage in isolation.
 
 ## Repository Status
 
-The archived Texas T&D tables still include the deterministic screening waveform
-and architecture-level voltage-support assumptions in
-`src/ai_dc_backbone/texas_td_scenarios.py`.
+The primary GridPACK-backed path is under `cosim/gridpack_td_dynamic_var/` and
+uses `Travis150-updated/150.RAW` plus
+`Travis150-updated/150_gridpack_REECA1_candidate.dyr`.
 
-The GridDyn-backed path under `cosim/griddyn_td_dynamic_var/` now includes an
-executed local GridDyn/HELICS/OpenDSS demo:
-
-- GridDyn executable: `/opt/homebrew/bin/gridDynMain` in the local run.
-- Transmission case: Travis-derived GridDyn proxy generated at
-  `cosim/griddyn_td_dynamic_var/results/griddyn_travis150_proxy_case.xml` from
-  `Travis150/Travis150_Electric_Data.aux`.
-- HELICS/OpenDSS result: `cosim/griddyn_td_dynamic_var/results/helics_opendss_dynamic_var_summary.csv`.
-- Result: the HELICS POI voltage reached 0.250 pu using the documented
-  event-inspired sag train. C1 reached 0.241 pu at the 480 V AC load boundary
-  and tripped. C2 reached 0.241 pu at the local SST boundary and still tripped
-  in this severe uncoordinated local-support demo. C3 reached 0.241 pu on the
-  OpenDSS AC side, but the modeled DC buffer held the 800 VDC load boundary at
-  1.0 pu and the data center did not trip.
-
-This is not yet a full Texas A&M Travis 150 dynamic result, because generator,
-load and protection dynamic data are not included in the public AUX case. Use
-`scripts/run_griddyn_td_dynamic_var.py --griddyn-case ... --poi-voltage-field ...`
-when that full dynamic case is supplied.
+- GridPACK event sweep:
+  `cosim/gridpack_td_dynamic_var/results_event_sweep/event_sweep_summary_compact.csv`.
+- Transmission observation: six shifted 3 s branch-fault simulations on the
+  137-150 branch with bus 150 as the POI voltage observation.
+- Result: the lowest POI minimum is 0.091994 pu. C1 and C2 trip in the
+  HELICS/OpenDSS data-center federation, while C3 keeps the modeled 800 VDC
+  load boundary served through the centralized AC/DC-terminal and DC-buffer
+  representation.
