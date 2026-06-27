@@ -1,4 +1,4 @@
-import os, json, math, shutil, zipfile, hashlib, textwrap, subprocess
+import os, json, math, shutil, zipfile, hashlib, textwrap, subprocess, tempfile
 from itertools import product
 from pathlib import Path
 import numpy as np
@@ -1670,10 +1670,11 @@ Stanford University
 (ROOT/'cover_letter_nature_communications.md').write_text(cover_letter, encoding='utf-8')
 
 def rewrite_pdf_for_reader_compatibility(pdf_path):
-    """Rewrite PDF objects to avoid reader-specific blank-page rendering issues."""
+    """Rewrite and raster-pack PDFs to avoid reader-specific blank-page rendering issues."""
 
     if pdf_path is None or not Path(pdf_path).exists():
         return pdf_path
+    pdf_path = Path(pdf_path)
     try:
         from PyPDF2 import PdfReader, PdfWriter
     except Exception as exc:
@@ -1684,7 +1685,6 @@ def rewrite_pdf_for_reader_compatibility(pdf_path):
         )
         return pdf_path
 
-    pdf_path = Path(pdf_path)
     tmp_path = pdf_path.with_suffix('.rewrite_tmp.pdf')
     reader = PdfReader(str(pdf_path))
     writer = PdfWriter()
@@ -1693,6 +1693,56 @@ def rewrite_pdf_for_reader_compatibility(pdf_path):
     with tmp_path.open('wb') as f:
         writer.write(f)
     tmp_path.replace(pdf_path)
+
+    pdftoppm = shutil.which('pdftoppm')
+    if pdftoppm is None:
+        bundled = Path.home() / '.cache' / 'codex-runtimes' / 'codex-primary-runtime' / 'dependencies' / 'bin' / 'pdftoppm'
+        if bundled.exists():
+            pdftoppm = str(bundled)
+    if pdftoppm is None:
+        note = pdf_path.with_suffix('.pdf_rewrite_note.txt')
+        note.write_text(
+            'PDF object rewrite completed. Raster compatibility pass skipped because pdftoppm was unavailable.\n',
+            encoding='utf-8',
+        )
+        return pdf_path
+
+    try:
+        from PIL import Image
+        from reportlab.lib.utils import ImageReader
+        from reportlab.pdfgen import canvas
+    except Exception as exc:
+        note = pdf_path.with_suffix('.pdf_rewrite_note.txt')
+        note.write_text(
+            f'PDF object rewrite completed. Raster compatibility pass skipped because an imaging dependency was unavailable: {exc}\n',
+            encoding='utf-8',
+        )
+        return pdf_path
+
+    dpi = 180
+    raster_tmp = pdf_path.with_suffix('.raster_tmp.pdf')
+    with tempfile.TemporaryDirectory(prefix='pdf_raster_', dir=str(pdf_path.parent)) as tmpdir:
+        prefix = Path(tmpdir) / 'page'
+        subprocess.run(
+            [pdftoppm, '-r', str(dpi), '-png', str(pdf_path), str(prefix)],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        rendered_pages = sorted(Path(tmpdir).glob('page-*.png'))
+        if not rendered_pages:
+            raise RuntimeError(f'pdftoppm produced no rendered pages for {pdf_path}')
+        c = canvas.Canvas(str(raster_tmp))
+        for rendered in rendered_pages:
+            with Image.open(rendered) as img:
+                width_pt = img.width * 72.0 / dpi
+                height_pt = img.height * 72.0 / dpi
+            c.setPageSize((width_pt, height_pt))
+            c.drawImage(ImageReader(str(rendered)), 0, 0, width=width_pt, height=height_pt)
+            c.showPage()
+        c.save()
+    raster_tmp.replace(pdf_path)
     return pdf_path
 
 def create_tex_pdf_package():
@@ -1784,7 +1834,7 @@ def create_tex_pdf_package():
     pdf_out = rewrite_pdf_for_reader_compatibility(tex_path.with_suffix('.pdf'))
 
     note.write_text(
-        'TeX and PDF were generated with pandoc and tectonic from the manuscript markdown with inline figures. The PDF was rewritten with PyPDF2 for reader compatibility.\n',
+        'TeX and PDF were generated with pandoc and tectonic from the manuscript markdown with inline figures. The PDF was rewritten and raster-packed for reader compatibility.\n',
         encoding='utf-8',
     )
     return tex_path, overleaf_path, pdf_out
@@ -1830,7 +1880,7 @@ def create_supplementary_pdf_package():
     supp_pdf_out = rewrite_pdf_for_reader_compatibility(supp_tex_path.with_suffix('.pdf'))
 
     note.write_text(
-        'Supplementary TeX and PDF were generated with pandoc and tectonic from the supplementary markdown with inline figures. The PDF was rewritten with PyPDF2 for reader compatibility.\n',
+        'Supplementary TeX and PDF were generated with pandoc and tectonic from the supplementary markdown with inline figures. The PDF was rewritten and raster-packed for reader compatibility.\n',
         encoding='utf-8',
     )
     return supp_tex_path, supp_pdf_out
@@ -1998,8 +2048,8 @@ if not (REPO/'scripts'/'reproduce_all.py').exists():
     abstract: "Reproducibility package containing source data, OpenDSS cases, figure-generation code and verification tests for a manuscript on direct-current subtransmission backbones for grid-stable AI factories."
 '''))
 (REPO/'LICENSE').write_text('MIT License\n\nCopyright (c) 2026 Authors\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files...\n')
-(REPO/'requirements.txt').write_text('numpy\npandas\nmatplotlib\npython-docx\n')
-(REPO/'environment.yml').write_text('name: dc-backbone-ai-factories\nchannels:\n  - conda-forge\ndependencies:\n  - python>=3.10\n  - numpy\n  - pandas\n  - matplotlib\n  - python-docx\n')
+(REPO/'requirements.txt').write_text('numpy\npandas\nmatplotlib\npython-docx\nPyPDF2\nPillow\nreportlab\n')
+(REPO/'environment.yml').write_text('name: dc-backbone-ai-factories\nchannels:\n  - conda-forge\ndependencies:\n  - python>=3.10\n  - numpy\n  - pandas\n  - matplotlib\n  - python-docx\n  - pip\n  - pip:\n      - PyPDF2\n      - Pillow\n      - reportlab\n')
 (REPO/'docs'/'reproduction.md').write_text(textwrap.dedent('''
     This repository is structured for public release. To regenerate the archived
     OpenDSS Fig. 3 diagnostic and Fig. 5 from archived CSV outputs, run:
