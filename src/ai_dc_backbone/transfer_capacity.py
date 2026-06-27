@@ -20,6 +20,9 @@ class TransferCapacityAssumptions:
     length_km: float = 20.0
     vac_ll_kv: float = 138.0
     vdc_pp_kv: float = 276.0
+    high_voltage_envelope_factor: float = 1.5
+    dc_current_retention_factor: float = 1.0
+    converter_cap_multiplier: float = 2.0
     r_ohm_km: float = 0.01
     x_ohm_km: float = 0.10
     pf: float = 0.98
@@ -54,6 +57,72 @@ class TransferCapacityAssumptions:
     @property
     def ac_current_base_kA(self) -> float:
         return self.s_base_mva / (math.sqrt(3.0) * self.vac_ll_kv)
+
+    @property
+    def ac_line_to_ground_peak_kv(self) -> float:
+        return math.sqrt(2.0 / 3.0) * self.vac_ll_kv
+
+
+def ac_transfer_capacity_mw(
+    vac_ll_kv: float,
+    current_limit_kA: float,
+    pf: float,
+) -> float:
+    """AC corridor active transfer from voltage, current and power factor."""
+
+    return math.sqrt(3.0) * vac_ll_kv * current_limit_kA * pf
+
+
+def dc_transfer_capacity_mw(
+    v_pole_kv: float,
+    current_limit_kA: float,
+    current_retention: float = 1.0,
+    converter_cap_mw: float = math.inf,
+) -> float:
+    """Bipolar DC corridor transfer with optional current retention and converter cap."""
+
+    thermal_mw = 2.0 * v_pole_kv * current_limit_kA * current_retention
+    return min(thermal_mw, converter_cap_mw)
+
+
+def corridor_capacity_envelope(
+    assumptions: TransferCapacityAssumptions = TransferCapacityAssumptions(),
+    *,
+    voltage_envelope_factor: float | None = None,
+    v_pole_kv: float | None = None,
+    current_retention: float | None = None,
+    converter_cap_multiplier: float | None = None,
+) -> dict[str, float | str]:
+    """Compare AC transfer capacity with an AC-to-DC conversion envelope."""
+
+    a = assumptions
+    alpha = (
+        a.high_voltage_envelope_factor
+        if voltage_envelope_factor is None
+        else voltage_envelope_factor
+    )
+    pole_kv = alpha * a.ac_line_to_ground_peak_kv if v_pole_kv is None else v_pole_kv
+    alpha = pole_kv / a.ac_line_to_ground_peak_kv
+    retention = a.dc_current_retention_factor if current_retention is None else current_retention
+    cap_multiplier = a.converter_cap_multiplier if converter_cap_multiplier is None else converter_cap_multiplier
+    ac_mw = ac_transfer_capacity_mw(a.vac_ll_kv, a.current_limit_kA, a.pf)
+    dc_thermal_mw = 2.0 * pole_kv * a.current_limit_kA * retention
+    converter_cap_mw = cap_multiplier * ac_mw
+    dc_mw = min(dc_thermal_mw, converter_cap_mw)
+    return {
+        "ac_transfer_capacity_mw": ac_mw,
+        "dc_transfer_capacity_mw": dc_mw,
+        "dc_thermal_capacity_mw": dc_thermal_mw,
+        "dc_pole_kv": pole_kv,
+        "voltage_envelope_factor": alpha,
+        "current_retention_factor": retention,
+        "converter_cap_mw": converter_cap_mw,
+        "capacity_multiplier": dc_mw / ac_mw,
+        "capacity_increase_pct": 100.0 * (dc_mw / ac_mw - 1.0),
+        "binding_constraint": (
+            "converter_rating_cap" if converter_cap_mw < dc_thermal_mw else "thermal_current_limit"
+        ),
+    }
 
 
 def thermal_capacity_envelope(

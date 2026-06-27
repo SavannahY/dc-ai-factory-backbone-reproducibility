@@ -40,6 +40,10 @@ assumptions = {
     'ac_voltage_LL_kV': 138,
     'dc_bipole_kV': 276,
     'dc_pole_kV': 138,
+    'reference_current_limit_kA': 3.2,
+    'high_voltage_dc_envelope_factor': 1.5,
+    'dc_current_retention_factor': 1.0,
+    'dc_converter_cap_multiplier': 2.0,
     'power_factor': 0.98,
     'line_resistance_ohm_per_km_phase_or_pole': 0.010,
     'traditional_downstream_efficiency': 0.991*0.982,
@@ -57,7 +61,7 @@ assumptions = {
 (DATA/'assumptions_v3.json').write_text(json.dumps(assumptions, indent=2))
 shutil.copy(DATA/'assumptions_v3.json', REPO/'data'/'assumptions_v3.json')
 
-# ---------------------------- Efficiency model ----------------------------
+# ---------------------------- Transfer-capacity model ----------------------------
 def losses_eff(load_MW=1000, length_km=20, r_ohm_km=0.01, pf=0.98,
                trad_eff=0.991*0.982, sst_eff=0.985, dc_term=0.994, dc1=0.994, dc2=0.992,
                vac_kv=138, vdc_pp_kv=276):
@@ -84,152 +88,184 @@ def losses_eff(load_MW=1000, length_km=20, r_ohm_km=0.01, pf=0.98,
         'Subtransmission DC backbone': {'loss_MW':(input_dc-P)/1e6, 'eff':P/input_dc, 'corridor_MW':line_dc/1e6, 'conversion_MW':(input_dc-P-line_dc)/1e6, 'current_kA':I_dc/1000},
     }
 
-def grid_input_MW(load_MW, architecture, **kwargs):
-    return load_MW + losses_eff(load_MW=load_MW, **kwargs)[architecture]['loss_MW']
+def ac_line_to_ground_peak_kv(v_ll_kv):
+    return math.sqrt(2.0 / 3.0) * v_ll_kv
 
-def useful_transfer_at_grid_input(input_limit_MW, architecture, **kwargs):
-    lo = 0.0
-    hi = input_limit_MW
-    for _ in range(70):
-        mid = 0.5*(lo + hi)
-        if grid_input_MW(mid, architecture, **kwargs) <= input_limit_MW:
-            lo = mid
+def ac_transfer_capacity_mw(v_ll_kv=138.0, current_limit_kA=3.2, pf=0.98):
+    return math.sqrt(3.0) * v_ll_kv * current_limit_kA * pf
+
+def dc_transfer_capacity_mw(
+    v_pole_kv,
+    current_limit_kA=3.2,
+    current_retention=1.0,
+    converter_cap_mw=math.inf,
+):
+    thermal_mw = 2.0 * v_pole_kv * current_limit_kA * current_retention
+    return min(thermal_mw, converter_cap_mw)
+
+def capacity_case(
+    architecture,
+    v_ll_kv=138.0,
+    current_limit_kA=3.2,
+    pf=0.98,
+    voltage_envelope_factor=None,
+    v_pole_kv=None,
+    current_retention=1.0,
+    converter_cap_multiplier=2.0,
+    external_reference_multiplier=None,
+):
+    ac_mw = ac_transfer_capacity_mw(v_ll_kv, current_limit_kA, pf)
+    if architecture == 'Traditional AC':
+        capacity_mw = ac_mw
+        pole_kv = np.nan
+        alpha = np.nan
+        thermal_mw = ac_mw
+        converter_cap_mw = np.nan
+        binding = 'thermal_current_limit'
+    elif external_reference_multiplier is not None:
+        capacity_mw = ac_mw * external_reference_multiplier
+        pole_kv = np.nan
+        alpha = np.nan
+        thermal_mw = capacity_mw
+        converter_cap_mw = np.nan
+        binding = 'reported_external_reference'
+    else:
+        alpha = voltage_envelope_factor
+        if v_pole_kv is None:
+            pole_kv = alpha * ac_line_to_ground_peak_kv(v_ll_kv)
         else:
-            hi = mid
-    return lo
+            pole_kv = v_pole_kv
+            alpha = pole_kv / ac_line_to_ground_peak_kv(v_ll_kv)
+        thermal_mw = 2.0 * pole_kv * current_limit_kA * current_retention
+        converter_cap_mw = converter_cap_multiplier * ac_mw
+        capacity_mw = min(thermal_mw, converter_cap_mw)
+        binding = 'converter_rating_cap' if converter_cap_mw < thermal_mw else 'thermal_current_limit'
+    multiplier = capacity_mw / ac_mw
+    return {
+        'architecture': architecture,
+        'ac_voltage_ll_kV': v_ll_kv,
+        'ac_line_to_ground_peak_kV': ac_line_to_ground_peak_kv(v_ll_kv),
+        'dc_pole_kV': pole_kv,
+        'voltage_envelope_factor': alpha,
+        'current_limit_kA': current_limit_kA,
+        'ac_power_factor': pf,
+        'dc_current_retention_factor': current_retention,
+        'converter_cap_multiplier': converter_cap_multiplier if architecture != 'Traditional AC' else np.nan,
+        'ac_transfer_capacity_MW': ac_mw,
+        'dc_thermal_capacity_MW': thermal_mw if architecture != 'Traditional AC' else np.nan,
+        'converter_cap_MW': converter_cap_mw,
+        'transfer_capacity_MW': capacity_mw,
+        'capacity_multiplier_vs_ac': multiplier,
+        'capacity_increase_pct': 100.0 * (multiplier - 1.0),
+        'binding_constraint': binding,
+        'reference_note': 'UltraNet reported reference' if external_reference_multiplier is not None else '',
+    }
 
-def transfer_gain_vs_traditional(load_MW=1000, **kwargs):
-    input_limit = grid_input_MW(load_MW, 'Traditional AC', **kwargs)
-    return useful_transfer_at_grid_input(input_limit, 'Subtransmission DC backbone', **kwargs) - load_MW
-
-ref = losses_eff()
-ref_sens = losses_eff(sst_eff=assumptions['local_sst_sensitivity_efficiency'])
-ref_input_limit = grid_input_MW(assumptions['reference_load_MW'], 'Traditional AC')
-ref_rows=[]
-for k,v in ref.items():
-    transfer = useful_transfer_at_grid_input(ref_input_limit, k)
-    ref_rows.append({
-        'architecture':k,
-        **v,
-        'equal_grid_input_limit_MW':ref_input_limit,
-        'useful_transfer_at_equal_input_MW':transfer,
-        'transfer_gain_vs_traditional_MW':transfer - assumptions['reference_load_MW'],
-    })
-transfer_sens = useful_transfer_at_grid_input(
-    ref_input_limit,
-    'Local SST',
-    sst_eff=assumptions['local_sst_sensitivity_efficiency'],
-)
-ref_rows.append({
-    'architecture':'Local SST 99pct sensitivity',
-    **ref_sens['Local SST'],
-    'equal_grid_input_limit_MW':ref_input_limit,
-    'useful_transfer_at_equal_input_MW':transfer_sens,
-    'transfer_gain_vs_traditional_MW':transfer_sens - assumptions['reference_load_MW'],
-})
-ref_df=pd.DataFrame(ref_rows)
-ref_df['annual_loss_GWh_at_90pct_LF']=ref_df['loss_MW']*8760*0.90/1000
+reference_current_kA = assumptions['reference_current_limit_kA']
+reference_vll_kv = assumptions['ac_voltage_LL_kV']
+reference_pf = assumptions['power_factor']
+strict_dc_pole_kv = assumptions['dc_pole_kV']
+high_voltage_alpha = assumptions['high_voltage_dc_envelope_factor']
+high_voltage_pole_kv = high_voltage_alpha * ac_line_to_ground_peak_kv(reference_vll_kv)
+ref_rows = [
+    capacity_case('Traditional AC', reference_vll_kv, reference_current_kA, reference_pf),
+    capacity_case('Conservative DC', reference_vll_kv, reference_current_kA, reference_pf, v_pole_kv=strict_dc_pole_kv),
+    capacity_case('High-voltage DC', reference_vll_kv, reference_current_kA, reference_pf, voltage_envelope_factor=high_voltage_alpha),
+    capacity_case('UltraNet reported reference', reference_vll_kv, reference_current_kA, reference_pf, external_reference_multiplier=1.40),
+]
+ref_df = pd.DataFrame(ref_rows)
 ref_df.to_csv(DATA/'transfer_capacity_reference_case_v3.csv', index=False)
 
-# Design space
-loads=np.linspace(100,3000,80); lengths=np.linspace(5,100,75)
-rows=[]
-for L in loads:
-    for d in lengths:
-        r=losses_eff(L,d)
-        r_sens=losses_eff(L,d,sst_eff=assumptions['local_sst_sensitivity_efficiency'])
-        input_limit = grid_input_MW(L, 'Traditional AC', length_km=d)
-        local_transfer = useful_transfer_at_grid_input(input_limit, 'Local SST', length_km=d)
-        local_transfer_sens = useful_transfer_at_grid_input(
-            input_limit,
-            'Local SST',
-            length_km=d,
-            sst_eff=assumptions['local_sst_sensitivity_efficiency'],
-        )
-        dc_transfer = useful_transfer_at_grid_input(input_limit, 'Subtransmission DC backbone', length_km=d)
-        rows.append({'load_MW':L,'length_km':d,
-                     'saving_vs_traditional_MW':r['Traditional AC']['loss_MW']-r['Subtransmission DC backbone']['loss_MW'],
-                     'saving_vs_local_sst_MW':r['Local SST']['loss_MW']-r['Subtransmission DC backbone']['loss_MW'],
-                     'saving_vs_99pct_local_sst_sensitivity_MW':r_sens['Local SST']['loss_MW']-r['Subtransmission DC backbone']['loss_MW'],
-                     'equal_grid_input_limit_MW':input_limit,
-                     'local_sst_transfer_at_equal_input_MW':local_transfer,
-                     'local_sst_99pct_transfer_at_equal_input_MW':local_transfer_sens,
-                     'dc_transfer_at_equal_input_MW':dc_transfer,
-                     'local_sst_transfer_gain_vs_traditional_MW':local_transfer-L,
-                     'local_sst_99pct_transfer_gain_vs_traditional_MW':local_transfer_sens-L,
-                     'dc_transfer_gain_vs_traditional_MW':dc_transfer-L,
-                     'dc_loss_MW':r['Subtransmission DC backbone']['loss_MW'],
-                     'traditional_loss_MW':r['Traditional AC']['loss_MW'],
-                     'local_sst_loss_MW':r['Local SST']['loss_MW'],
-                     'local_sst_99pct_sensitivity_loss_MW':r_sens['Local SST']['loss_MW']})
-design_df=pd.DataFrame(rows); design_df.to_csv(DATA/'transfer_capacity_design_space_v3.csv', index=False)
+# Capacity design space for the 138 kV reference class.
+current_limits = np.linspace(2.0, 6.0, 80)
+rows = []
+for current in current_limits:
+    for case in [
+        capacity_case('Traditional AC', reference_vll_kv, current, reference_pf),
+        capacity_case('Conservative DC', reference_vll_kv, current, reference_pf, v_pole_kv=strict_dc_pole_kv),
+        capacity_case('High-voltage DC', reference_vll_kv, current, reference_pf, voltage_envelope_factor=high_voltage_alpha),
+    ]:
+        rows.append(case)
+design_df = pd.DataFrame(rows)
+design_df.to_csv(DATA/'transfer_capacity_design_space_v3.csv', index=False)
 
-# Monte Carlo uncertainty
-mc=[]
+# Monte Carlo uncertainty for corridor transfer capacity.
+mc = []
 for i in range(8000):
-    r = rng.triangular(0.006,0.010,0.018)
-    pf = rng.triangular(0.94,0.98,1.0)
-    trad_eff = rng.triangular(0.960,0.973,0.982)
-    sst_eff = rng.triangular(0.975,0.985,0.990)
-    dc_term = rng.triangular(0.988,0.994,0.997)
-    dc1 = rng.triangular(0.988,0.994,0.997)
-    dc2 = rng.triangular(0.985,0.992,0.996)
-    length = rng.triangular(10,20,50)
-    res=losses_eff(1000,length,r,pf,trad_eff,sst_eff,dc_term,dc1,dc2)
-    res_sens=losses_eff(1000,length,r,pf,trad_eff,0.990,dc_term,dc1,dc2)
-    input_limit = grid_input_MW(1000, 'Traditional AC', length_km=length, r_ohm_km=r, pf=pf, trad_eff=trad_eff, sst_eff=sst_eff, dc_term=dc_term, dc1=dc1, dc2=dc2)
-    local_transfer = useful_transfer_at_grid_input(input_limit, 'Local SST', length_km=length, r_ohm_km=r, pf=pf, trad_eff=trad_eff, sst_eff=sst_eff, dc_term=dc_term, dc1=dc1, dc2=dc2)
-    local_transfer_sens = useful_transfer_at_grid_input(input_limit, 'Local SST', length_km=length, r_ohm_km=r, pf=pf, trad_eff=trad_eff, sst_eff=0.990, dc_term=dc_term, dc1=dc1, dc2=dc2)
-    dc_transfer = useful_transfer_at_grid_input(input_limit, 'Subtransmission DC backbone', length_km=length, r_ohm_km=r, pf=pf, trad_eff=trad_eff, sst_eff=sst_eff, dc_term=dc_term, dc1=dc1, dc2=dc2)
-    mc.append({'traditional_loss_MW':res['Traditional AC']['loss_MW'],
-               'local_sst_loss_MW':res['Local SST']['loss_MW'],
-               'local_sst_99pct_sensitivity_loss_MW':res_sens['Local SST']['loss_MW'],
-               'dc_loss_MW':res['Subtransmission DC backbone']['loss_MW'],
-               'saving_vs_traditional_MW':res['Traditional AC']['loss_MW']-res['Subtransmission DC backbone']['loss_MW'],
-               'saving_vs_local_sst_MW':res['Local SST']['loss_MW']-res['Subtransmission DC backbone']['loss_MW'],
-               'equal_grid_input_limit_MW':input_limit,
-               'local_sst_transfer_gain_vs_traditional_MW':local_transfer-1000,
-               'local_sst_99pct_transfer_gain_vs_traditional_MW':local_transfer_sens-1000,
-               'dc_transfer_gain_vs_traditional_MW':dc_transfer-1000,
-               'r_ohm_km':r,'pf':pf,'trad_eff':trad_eff,'sst_eff':sst_eff,'dc_term':dc_term,'dc1':dc1,'dc2':dc2,'length_km':length})
-mc_df=pd.DataFrame(mc); mc_df.to_csv(DATA/'transfer_capacity_uncertainty_reference_v3.csv', index=False)
+    pf = rng.triangular(0.94, 0.98, 1.0)
+    alpha = rng.triangular(1.25, 1.48, 1.50)
+    current_retention = rng.triangular(0.95, 1.0, 1.0)
+    converter_cap_multiplier = rng.triangular(1.30, 1.80, 2.0)
+    current = rng.triangular(2.5, 3.2, 5.5)
+    row = capacity_case(
+        'High-voltage DC',
+        reference_vll_kv,
+        current,
+        pf,
+        voltage_envelope_factor=alpha,
+        current_retention=current_retention,
+        converter_cap_multiplier=converter_cap_multiplier,
+    )
+    row.update({'sample': i})
+    mc.append(row)
+mc_df = pd.DataFrame(mc)
+mc_df.to_csv(DATA/'transfer_capacity_uncertainty_reference_v3.csv', index=False)
 
-# Tornado sensitivity
-base_saving=ref['Traditional AC']['loss_MW']-ref['Subtransmission DC backbone']['loss_MW']
-base_transfer_gain=transfer_gain_vs_traditional()
-sens_specs={
- 'corridor length':(10,50,'length_km'),
- 'conductor resistance':(0.006,0.018,'r_ohm_km'),
- 'traditional downstream efficiency':(0.960,0.982,'trad_eff'),
- 'DC terminal efficiency':(0.988,0.997,'dc_term'),
- 'HV DC/DC efficiency':(0.988,0.997,'dc1'),
- '34.5 kV/800 V DC/DC efficiency':(0.985,0.996,'dc2'),
- 'AC power factor':(0.94,1.0,'pf'),
+# One-at-a-time sensitivity around the high-voltage DC reference case.
+base_capacity = capacity_case(
+    'High-voltage DC',
+    reference_vll_kv,
+    reference_current_kA,
+    reference_pf,
+    voltage_envelope_factor=high_voltage_alpha,
+    current_retention=1.0,
+    converter_cap_multiplier=2.0,
+)
+sens_specs = {
+    'voltage envelope factor': (strict_dc_pole_kv / ac_line_to_ground_peak_kv(reference_vll_kv), 1.50, 'voltage_envelope_factor'),
+    'AC power factor': (0.94, 1.00, 'pf'),
+    'retained DC current': (0.90, 1.00, 'current_retention'),
+    'converter rating cap': (1.15, 1.80, 'converter_cap_multiplier'),
 }
-sens=[]
-for name,(lo,hi,param) in sens_specs.items():
-    kwargs={param:lo}
-    low=losses_eff(**kwargs)['Traditional AC']['loss_MW']-losses_eff(**kwargs)['Subtransmission DC backbone']['loss_MW']
-    low_transfer=transfer_gain_vs_traditional(**kwargs)
-    kwargs={param:hi}
-    high=losses_eff(**kwargs)['Traditional AC']['loss_MW']-losses_eff(**kwargs)['Subtransmission DC backbone']['loss_MW']
-    high_transfer=transfer_gain_vs_traditional(**kwargs)
-    sens.append({'parameter':name,'low_case_saving_MW':low,'high_case_saving_MW':high,'base_saving_MW':base_saving,
-                 'low_case_transfer_gain_MW':low_transfer,'high_case_transfer_gain_MW':high_transfer,'base_transfer_gain_MW':base_transfer_gain})
-sens_df=pd.DataFrame(sens); sens_df.to_csv(DATA/'transfer_capacity_sensitivity_v3.csv',index=False)
+sens = []
+for name, (lo, hi, param) in sens_specs.items():
+    kwargs = {
+        'v_ll_kv': reference_vll_kv,
+        'current_limit_kA': reference_current_kA,
+        'pf': reference_pf,
+        'voltage_envelope_factor': high_voltage_alpha,
+        'current_retention': 1.0,
+        'converter_cap_multiplier': 2.0,
+    }
+    kwargs[param] = lo
+    low = capacity_case('High-voltage DC', **kwargs)
+    kwargs[param] = hi
+    high = capacity_case('High-voltage DC', **kwargs)
+    sens.append({
+        'parameter': name,
+        'low_case_multiplier': low['capacity_multiplier_vs_ac'],
+        'high_case_multiplier': high['capacity_multiplier_vs_ac'],
+        'base_multiplier': base_capacity['capacity_multiplier_vs_ac'],
+        'low_case_increase_pct': low['capacity_increase_pct'],
+        'high_case_increase_pct': high['capacity_increase_pct'],
+        'base_increase_pct': base_capacity['capacity_increase_pct'],
+    })
+sens_df = pd.DataFrame(sens)
+sens_df.to_csv(DATA/'transfer_capacity_sensitivity_v3.csv', index=False)
 
 # Economic/copper first-order envelope
 price_grid=np.array([40,60,80,120])
 lf_grid=np.array([0.5,0.7,0.9,1.0])
 econ=[]
-save_mw=ref['Traditional AC']['loss_MW']-ref['Subtransmission DC backbone']['loss_MW']
+loss_ref=losses_eff()
+save_mw=loss_ref['Traditional AC']['loss_MW']-loss_ref['Subtransmission DC backbone']['loss_MW']
 for lf in lf_grid:
     for price in price_grid:
         annual_mwh=save_mw*8760*lf
         econ.append({'load_factor':lf,'electricity_price_USD_MWh':price,'annual_saving_GWh':annual_mwh/1000,'annual_value_USD_M':annual_mwh*price/1e6})
 # current-length index approximates conductor cross-section/thermal burden
 for arch in ['Traditional AC','Local SST','Subtransmission DC backbone']:
-    econ.append({'metric':'current_length_index_kA_km','architecture':arch,'value':ref[arch]['current_kA']*20})
+    econ.append({'metric':'current_length_index_kA_km','architecture':arch,'value':loss_ref[arch]['current_kA']*20})
 pd.DataFrame(econ).to_csv(DATA/'cost_copper_envelope_v3.csv', index=False)
 
 # ---------------------------- Harmonic model ----------------------------
@@ -726,86 +762,82 @@ figure1()
 # Figure 2
 def figure2():
     fig,axes=plt.subplots(2,2,figsize=(11,8),gridspec_kw={'width_ratios':[1,1], 'height_ratios':[1,1]})
-    colors={'Traditional AC':'#377eb8','Local SST':'#984ea3','Subtransmission DC backbone':'#e6550d'}
-    order=['Traditional AC','Local SST','Subtransmission DC backbone']
+    colors={'Traditional AC':'#377eb8','Conservative DC':'#984ea3','High-voltage DC':'#e6550d'}
+    order=['Traditional AC','Conservative DC','High-voltage DC']
     ax=axes[0,0]
     ref_idx=ref_df.set_index('architecture')
-    gains=[ref_idx.loc[o,'transfer_gain_vs_traditional_MW'] for o in order]
-    transfers=[ref_idx.loc[o,'useful_transfer_at_equal_input_MW'] for o in order]
+    multipliers=[ref_idx.loc[o,'capacity_multiplier_vs_ac'] for o in order]
+    capacities=[ref_idx.loc[o,'transfer_capacity_MW'] for o in order]
     x=np.arange(len(order))
-    ax.bar(x, gains, color=[colors[o] for o in order], alpha=0.88, width=0.62)
-    ax.axhline(0, color='0.25', lw=0.9)
-    ax.set_xticks(range(len(order))); ax.set_xticklabels(['Traditional\nAC','Local\nSST','DC\nbackbone'],fontsize=7)
-    ax.set_ylabel('Useful transfer gain at same grid input (MW)')
-    ax.set_title('a  Reference case',loc='left',fontsize=11,weight='bold')
-    ax.set_ylim(-0.65, max(gains)+4.6)
+    ax.bar(x, multipliers, color=[colors[o] for o in order], alpha=0.88, width=0.62)
+    ultranet = ref_idx.loc['UltraNet reported reference','capacity_multiplier_vs_ac']
+    ax.axhline(1.0, color='0.25', lw=0.9)
+    ax.axhline(ultranet, color='0.25', lw=1.0, ls='--', alpha=0.72)
+    ax.text(2.47, ultranet+0.012, 'UltraNet reported ~1.40x', ha='right', va='bottom', fontsize=6.8, color='0.25')
+    ax.set_xticks(range(len(order))); ax.set_xticklabels(['Traditional\nAC','Conservative\nDC','High-voltage\nDC'],fontsize=7)
+    ax.set_ylabel('Transfer-capacity multiplier vs AC')
+    ax.set_title('a  138 kV reference corridor',loc='left',fontsize=11,weight='bold')
+    ax.set_ylim(0.90, 1.55)
     for i,o in enumerate(order):
-        if abs(gains[i]) < 0.05:
-            label=f'baseline\n{transfers[i]/1000:.3f} GW'
+        if o == 'Traditional AC':
+            label=f'baseline\n{capacities[i]/1000:.2f} GW'
         else:
-            label=f'+{gains[i]:.1f} MW\n{transfers[i]/1000:.3f} GW'
-        ax.text(i,gains[i]+0.62,label,ha='center',fontsize=7)
-    ax.text(0.03,0.92,f'grid input fixed at {ref_input_limit:.1f} MW',transform=ax.transAxes,fontsize=6.8,color='0.35')
-    ax.text(0.03,0.84,'1 GW losses: AC 39.1, SST 26.5, DC 25.7 MW',transform=ax.transAxes,fontsize=6.8,color='0.35')
+            label=f'+{100*(multipliers[i]-1):.0f}%\n{capacities[i]/1000:.2f} GW'
+        ax.text(i,multipliers[i]+0.025,label,ha='center',fontsize=7)
+    ax.text(0.03,0.92,'138 kV AC, 3.2 kA, pf = 0.98',transform=ax.transAxes,fontsize=6.8,color='0.35')
+    ax.text(0.03,0.84,'High-voltage DC uses 1.5 x AC line-ground peak',transform=ax.transAxes,fontsize=6.8,color='0.35')
     ax.grid(axis='y',alpha=0.25)
+
     ax=axes[0,1]
-    data=[mc_df['local_sst_transfer_gain_vs_traditional_MW'], mc_df['dc_transfer_gain_vs_traditional_MW']]
-    box=ax.boxplot(data, whis=(5,95), showfliers=False, patch_artist=True, widths=0.45)
-    for patch,c in zip(box['boxes'],[colors['Local SST'], colors['Subtransmission DC backbone']]):
-        patch.set_facecolor(c); patch.set_edgecolor(c); patch.set_alpha(0.42)
-    for median in box['medians']:
-        median.set_color('0.15'); median.set_linewidth(1.4)
-    for whisker in box['whiskers']:
-        whisker.set_color('0.35'); whisker.set_linewidth(1.0)
-    for cap in box['caps']:
-        cap.set_color('0.35'); cap.set_linewidth(1.0)
-    ax.set_xticks([1,2]); ax.set_xticklabels(['Local\nSST','DC\nbackbone'],fontsize=7)
-    ax.set_ylabel('Transfer gain vs traditional AC (MW)')
-    ax.set_title('b  Uncertainty',loc='left',fontsize=11,weight='bold'); ax.grid(axis='y',alpha=0.25)
-    ax.axhline(0,color=colors['Traditional AC'],lw=0.8,ls='--',alpha=0.55)
-    ax.set_xlim(0.5,2.5)
-    ax.set_ylim(-1.3, max(np.percentile(d,95) for d in data)+4.0)
-    ax.text(2.45,0.45,'Traditional AC baseline',ha='right',fontsize=6.3,color=colors['Traditional AC'])
-    for i,d in enumerate(data, start=1):
-        med=np.median(d); p05=np.percentile(d,5); p95=np.percentile(d,95)
-        ax.text(i, p95+1.0, f'p50 {med:.1f}\n5-95% {p05:.1f}-{p95:.1f}', ha='center', fontsize=6.6)
+    for arch in order:
+        d=design_df[design_df['architecture']==arch]
+        ax.plot(d['current_limit_kA'], d['transfer_capacity_MW']/1000.0, color=colors[arch], lw=2.0, label=arch)
+    ax.axvline(reference_current_kA,color='0.3',lw=0.9,ls=':',alpha=0.8)
+    ax.axhline(1.0,color='0.6',lw=0.8,ls='--',alpha=0.7)
+    ax.text(reference_current_kA+0.06,0.42,'reference\n3.2 kA',fontsize=6.6,color='0.25',va='bottom')
+    ax.text(5.95,1.02,'1 GW',fontsize=6.6,color='0.35',ha='right',va='bottom')
+    ax.set_xlabel('Corridor current limit (kA)')
+    ax.set_ylabel('Transfer capacity (GW)')
+    ax.set_title('b  Current-limit scaling',loc='left',fontsize=11,weight='bold')
+    ax.grid(alpha=0.25)
+    ax.legend(frameon=False,fontsize=6.8,loc='upper left')
+
     ax=axes[1,0]
-    pivot=design_df.pivot(index='length_km',columns='load_MW',values='dc_transfer_gain_vs_traditional_MW')
-    im=ax.imshow(pivot.values,origin='lower',aspect='auto',extent=[loads.min(),loads.max(),lengths.min(),lengths.max()],cmap='YlOrRd')
-    cs=ax.contour(loads,lengths,pivot.values,levels=[10,50,100],colors='k',linewidths=0.8); ax.clabel(cs,fmt='%d MW',fontsize=7)
-    ax.scatter([1000],[20],c='white',edgecolors='black',s=40,zorder=3)
-    ax.annotate('reference\n1 GW, 20 km',xy=(1000,20),xytext=(1210,28),fontsize=6.7,
-                arrowprops=dict(arrowstyle='-',color='0.25',lw=0.8),ha='left',va='center',
-                bbox=dict(boxstyle='round,pad=0.16',facecolor='white',edgecolor='0.82',alpha=0.86))
-    ax.set_xlabel('Cluster load (MW)'); ax.set_ylabel('Corridor length (km)'); ax.set_title('c  Design space',loc='left',fontsize=11,weight='bold')
-    cax=inset_axes(ax,width='32%',height='3.4%',loc='lower right',
-                   bbox_to_anchor=(-0.05,0.08,1,1),bbox_transform=ax.transAxes,borderpad=0)
-    cb=fig.colorbar(im,cax=cax,orientation='horizontal'); cb.set_label('MW useful transfer gain',fontsize=6.5,labelpad=1)
-    cb.ax.xaxis.set_label_position('top')
-    cb.ax.tick_params(labelsize=6)
+    uplift=mc_df['capacity_increase_pct']
+    ax.hist(uplift,bins=34,color='#e6550d',alpha=0.78,edgecolor='white',linewidth=0.45)
+    p05,p50,p95=np.percentile(uplift,[5,50,95])
+    for val,lab in [(20,'20%'),(30,'30%'),(40,'40%')]:
+        ax.axvline(val,color='0.25',lw=0.8,ls='--',alpha=0.55)
+        ax.text(val+0.4,ax.get_ylim()[1]*0.90,lab,rotation=90,fontsize=6.5,color='0.25',va='top')
+    ax.axvline(p50,color='black',lw=1.2)
+    ax.text(0.97,0.92,f'8000 samples\np50 {p50:.0f}%\n5-95% {p05:.0f}-{p95:.0f}%',transform=ax.transAxes,
+            ha='right',va='top',fontsize=7.0,bbox=dict(facecolor='white',edgecolor='0.82',boxstyle='round,pad=0.18'))
+    ax.set_xlabel('Capacity increase vs traditional AC (%)')
+    ax.set_ylabel('Samples')
+    ax.set_title('c  Monte Carlo uncertainty',loc='left',fontsize=11,weight='bold')
+    ax.grid(axis='y',alpha=0.22)
+
     ax=axes[1,1]
-    tmp=sens_df.copy(); tmp['span']=abs(tmp['high_case_transfer_gain_MW']-tmp['low_case_transfer_gain_MW']); tmp=tmp.sort_values('span')
+    tmp=sens_df.copy(); tmp['span']=abs(tmp['high_case_multiplier']-tmp['low_case_multiplier']); tmp=tmp.sort_values('span')
     y=np.arange(len(tmp))
-    ax.hlines(y,tmp['low_case_transfer_gain_MW'],tmp['high_case_transfer_gain_MW'],color='#636363',lw=5,alpha=0.7)
-    ax.axvline(base_transfer_gain,color='#e6550d',lw=1.5,label='base')
+    ax.hlines(y,tmp['low_case_multiplier'],tmp['high_case_multiplier'],color='#636363',lw=5,alpha=0.7)
+    ax.axvline(base_capacity['capacity_multiplier_vs_ac'],color='#e6550d',lw=1.5,label='base')
     ax.set_ylim(-0.55,len(tmp)-0.15)
-    ax.annotate(f'base gain = {base_transfer_gain:.1f} MW',xy=(base_transfer_gain,len(tmp)-0.32),
-                xytext=(base_transfer_gain-1.15,len(tmp)-0.32),fontsize=7,color='#e6550d',
+    ax.annotate(f"base = {base_capacity['capacity_multiplier_vs_ac']:.2f}x",xy=(base_capacity['capacity_multiplier_vs_ac'],len(tmp)-0.32),
+                xytext=(base_capacity['capacity_multiplier_vs_ac']-0.08,len(tmp)-0.32),fontsize=7,color='#e6550d',
                 ha='right',va='center',arrowprops=dict(arrowstyle='-',color='#e6550d',lw=0.9))
     short_labels={
-        'traditional downstream efficiency':'trad. downstream eff.',
-        'corridor length':'corridor length',
-        '34.5 kV/800 V DC/DC efficiency':'34.5kV-800V eff.',
-        'HV DC/DC efficiency':'HV DC/DC eff.',
-        'DC terminal efficiency':'DC terminal eff.',
-        'conductor resistance':'conductor R',
-        'AC power factor':'AC power factor'
+        'voltage envelope factor':'voltage envelope',
+        'AC power factor':'AC power factor',
+        'retained DC current':'retained DC current',
+        'converter rating cap':'converter cap'
     }
     ax.set_yticks(y); ax.set_yticklabels([short_labels.get(p,p) for p in tmp['parameter']],fontsize=7)
     ax.tick_params(axis='y',pad=2)
-    ax.set_xlabel('DC transfer gain vs traditional AC (MW)'); ax.set_title('d  Sensitivity',loc='left',fontsize=11,weight='bold'); ax.grid(axis='x',alpha=0.25)
+    ax.set_xlabel('Capacity multiplier vs traditional AC'); ax.set_title('d  Sensitivity',loc='left',fontsize=11,weight='bold'); ax.grid(axis='x',alpha=0.25)
+    ax.set_xlim(1.05,1.58)
     fig.subplots_adjust(left=0.07,right=0.98,bottom=0.08,top=0.93,wspace=0.44,hspace=0.38)
-    savefig(fig,'transfer_capacity_loss_designspace')
+    savefig(fig,'corridor_transfer_capacity')
 figure2()
 
 # Figure 3
@@ -1244,7 +1276,7 @@ def figure_s4():
     ax=axes[0]
     grid=econ_df.dropna(subset=['annual_value_USD_M']).pivot(index='load_factor',columns='electricity_price_USD_MWh',values='annual_value_USD_M')
     im=ax.imshow(grid.values,origin='lower',aspect='auto',extent=[price_grid.min(),price_grid.max(),lf_grid.min(),lf_grid.max()],cmap='YlGn')
-    ax.set_xlabel('Electricity price ($/MWh)'); ax.set_ylabel('Load factor'); ax.set_title('a  Loss-saving value',loc='left',fontsize=10,weight='bold')
+    ax.set_xlabel('Electricity price ($/MWh)'); ax.set_ylabel('Load factor'); ax.set_title('a  Operating-cost screen',loc='left',fontsize=10,weight='bold')
     ax.scatter([assumptions['electricity_price_USD_per_MWh_mid']],[assumptions['economic_load_factor']],marker='*',s=110,c='#d94801',edgecolor='k',zorder=3)
     ax.text(assumptions['electricity_price_USD_per_MWh_mid']+4,assumptions['economic_load_factor'],'reference',fontsize=7,va='center')
     fig.colorbar(im,ax=ax,shrink=0.8,label='Annual value (million USD/yr)')
@@ -1262,21 +1294,19 @@ def figure_s4():
 figure_s4()
 
 # ---------------------------- Manuscript text ----------------------------
-abstract = """AI factories are becoming synchronized, DC-native, gigawatt-scale loads, but electric-grid planning still treats most data centers as passive AC facilities. This creates a boundary-placement problem: when the useful computational load is supplied at 800 VDC, the AC/DC interface can remain inside each building, move to local solid-state-transformer interfaces, or be placed upstream as a utility-operated subtransmission DC backbone. Here we show that moving this boundary upstream provides three coupled system benefits. First, it increases useful transfer capacity for new data-center corridors while reducing corridor and conversion losses relative to traditional AC delivery. Second, it centralizes AC-facing harmonic ownership at one utility converter terminal rather than distributing large converter interfaces across multiple campuses. Third, it creates a shared DC buffering layer that improves voltage ride-through for synchronized AI loads. Reference calculations, uncertainty sweeps, harmonic screening and a Travis 150 dynamic co-simulation preserve the same ordering: traditional AC is weakest, local SSTs improve selected metrics but retain multiple AC-facing interfaces, and the centralized DC corridor provides the most robust grid-facing boundary. These results support a falsifiable systems claim: for clustered AI factories, the AC/DC boundary is a subtransmission planning variable rather than only a building-level design choice."""
+abstract = """Conventional data centers have largely been planned as alternating-current (AC)-supplied, mostly passive loads. AI factories are different: they are becoming geographically clustered, synchronized and direct-current (DC)-native, with emerging 800 VDC distribution architectures moving the useful computational boundary away from conventional facility AC delivery. This shift creates a grid-planning question: if the useful computational load is supplied as DC power, where should the AC/DC boundary be placed? Here we compare three boundary placements: traditional AC delivery, local solid-state-transformer interfaces and a utility-operated subtransmission DC backbone. Moving the boundary upstream provides three coupled system benefits. First, it increases corridor transfer capacity for new data-center corridors under shared right-of-way and current constraints. Second, it centralizes AC-facing harmonic ownership at one utility converter terminal rather than distributing large converter interfaces across multiple campuses. Third, it creates a shared DC buffering layer that improves voltage ride-through for synchronized AI loads under transmission-side disturbances. Reference calculations, uncertainty sweeps, harmonic screening and a Travis 150 dynamic co-simulation preserve the same ordering: traditional AC is weakest, local solid-state-transformer interfaces improve selected metrics but retain multiple AC-facing interfaces, and the centralized DC corridor provides the most robust grid-facing boundary. These results support a falsifiable systems claim: for clustered AI factories, the AC/DC boundary is a subtransmission planning variable rather than only a building-level design choice."""
 
-intro = """AI factories change the electrical problem that grids must solve. A conventional data center can often be approximated in planning studies as a large but mostly passive load. A modern AI factory is a synchronized computing machine. Training iterations, all-reduce communication, checkpointing and accelerator power-management events can appear electrically as coherent power modulation across thousands of GPUs. At the scale of multiple campuses connected to the same grid pocket, power delivery becomes part of the computing architecture.
+intro = """Conventional data centers have long been represented in grid planning as large alternating-current (AC) loads whose internal power architecture is mostly hidden behind the facility meter. That abstraction is becoming less adequate for AI factories. Data-center demand is growing quickly and increasingly concentrates in regional load pockets, while AI training clusters behave less like independent background demand than synchronized computing machines. Training iterations, all-reduce communication, checkpointing and accelerator power-management events can appear electrically as coherent power modulation across thousands of GPUs. At multi-campus scale, power delivery becomes part of the computing architecture rather than only a building service.
 
-The planning problem is therefore not only how much electricity AI factories consume, but where the grid should place the controllable AC/DC boundary when the useful computational load is already DC-native. That placement can change useful transfer capacity, conversion losses, harmonic ownership, voltage ride-through and the division of control responsibility between utilities and campuses.
+Data-center energy studies have long shown that efficiency improvements can moderate electricity growth even as digital workloads expand, but recent AI-era assessments now frame data centers as geographically concentrated point loads whose growth can challenge regional planning timelines [1-4]. At the same time, the load-side architecture is moving toward direct current (DC). Recent industry roadmaps describe 800 VDC as a power-distribution architecture for AI data centers and AI factories that reduces current, copper, distribution volume and conversion stages while supporting future high-density racks [5]. Earlier 380 V DC data-center distribution studies and recent low-voltage DC facility guidance show the same architectural direction at lower voltage classes: reducing conversion stages can improve efficiency and reliability [6,7]. This makes the 800 VDC interface a plausible useful-load boundary for future AI-factory planning, not merely an equipment choice inside a building.
 
-Data-center energy studies have long shown that efficiency improvements can moderate electricity growth even as digital workloads expand, but recent AI-era assessments now frame data centers as geographically concentrated point loads whose growth can challenge regional planning timelines [1-4]. The load-side technology trajectory is also moving toward DC. Recent industry roadmaps describe 800 VDC as a power-distribution architecture for AI data centers and AI factories that reduces current, copper, distribution volume and conversion stages while supporting future high-density racks [5]. Earlier 380 V DC data-center distribution studies and recent low-voltage DC facility guidance show the same architectural direction at lower voltage classes: reducing conversion stages can improve efficiency and reliability [6,7]. This makes the 800 VDC interface a relevant terminal boundary for future AI-factory power delivery.
+Once the useful computational boundary is DC, the grid-planning question is no longer only how to serve a larger AC load. It is where the AC/DC interface should sit between the transmission system and the data-center racks. The interface can remain inside each building, move to local solid-state-transformer (SST) interfaces, or be placed upstream as a utility-operated subtransmission DC backbone. That placement can change corridor transfer capacity, harmonic ownership, voltage ride-through and the division of control responsibility between utilities and campuses.
 
-If the endpoint is DC, the system-level question is where the AC/DC boundary should be placed. Most current discussions move that boundary from the rack to the facility. This study asks whether it should move farther upstream, into the subtransmission corridor. The proposed architecture uses a utility-operated AC/DC terminal to feed a bipolar subtransmission DC backbone. Campus DC/DC stations then step the backbone to a 34.5 kV DC distribution layer and ultimately to the 800 VDC data-center interface.
+Existing power-electronics research supports this architecture-level comparison without making converter hardware the object of this study. Prior work on medium-voltage DC/DC conversion, SST interfaces and higher-voltage data-center distribution shows that campus-scale conversion to a DC load boundary is technically credible [8-11]. We use this literature only to set architecture-level efficiency ranges for the local-SST and centralized-DC cases; the central claim is evaluated at the system level through transfer capacity, harmonic ownership and voltage ride-through.
 
-Device-level work makes this question technically plausible. A 10 kV SiC 7 kV/400 V DC transformer for future data centers demonstrated 99.0% full-load DC/DC efficiency and 3.8 kW/L power density; the associated 3.8 kV AC to 400 V DC SST chain reached 98.1% full-load efficiency [8]. A modular 5 kV SiC SST demonstrated single-stage MVDC-to-LVDC or MVDC-to-LVAC conversion, full-range zero-voltage switching, controlled dv/dt and modular series/parallel scalability [9]. A 20 kW 1000 V/48 V prototype further shows that raising the data-center distribution voltage can reduce low-voltage current stress, with an estimated efficiency improvement to 97.5% using synchronous rectification [10]. More general SST literature likewise treats SSTs as controllable medium-voltage power-electronics interfaces rather than only replacements for low-frequency transformers [11].
+These load-side changes have direct grid consequences. A production-scale AI training power study by Microsoft, OpenAI and NVIDIA reports that synchronized training phases make power swings visible at rack, data-center and grid levels; at scale these swings can reach tens or hundreds of megawatts and can occupy sub-synchronous frequency ranges relevant to utility equipment [12]. A transmission-side voltage sag or branch-fault event is therefore not merely a local power-quality event: it can propagate through campus converters, trigger load-shed or trip logic at the data-center boundary, and feed back into the host grid. This motivates revisiting the AC/DC boundary as a grid-interface design variable rather than treating the data center as a passive AC load.
 
-The grid-side motivation is also visible. A production-scale AI training power study by Microsoft, OpenAI and NVIDIA reports that synchronized training phases make power swings visible at rack, data-center and grid levels; at scale these swings can reach tens or hundreds of megawatts and can occupy sub-synchronous frequency ranges relevant to utility equipment [12]. That work frames both time-domain ramp constraints and frequency-domain limits, including a 0.1-20 Hz range, as requirements for safe scaling.
-
-The knowledge gap is therefore not whether efficient DC conversion is possible, or whether AI training loads are dynamic. It is where the AC/DC boundary should sit when AI factories become multi-campus, gigawatt-scale grid assets. We test the claim that for AI factories, the AC/DC boundary is no longer only a building-level choice; it is a subtransmission planning variable."""
+The knowledge gap is therefore not whether efficient DC conversion is possible, whether 800 VDC will be used universally, or whether AI training loads are dynamic. It is where the AC/DC boundary should sit when AI factories become multi-campus, gigawatt-scale grid assets. We address this gap by comparing traditional AC delivery, local SST interfaces and a centralized subtransmission DC corridor under a common 800 VDC useful-load boundary. The claim is deliberately falsifiable: if the boundary placement matters, the same C1-C2-C3 ordering should appear across transfer capacity, harmonic ownership and voltage ride-through metrics."""
 
 results_sections = [
 ("An AI-native architecture with the AC/DC boundary moved upstream", """We compare three architectures that deliver identical useful power to an 800 VDC data-center boundary (Fig. 1). The traditional AC architecture uses a utility substation, an AC subtransmission corridor, facility AC distribution and distributed AC/DC conversion at each campus. The local-SST architecture keeps the AC corridor but places a solid-state transformer at each AI campus. The proposed architecture moves the first AC/DC terminal upstream and treats the DC subtransmission corridor as a utility asset. Downstream conversion is entirely DC/DC: from subtransmission DC to 34.5 kV DC campus distribution, and from that layer to 800 VDC.
@@ -1284,18 +1314,16 @@ results_sections = [
 The conceptual difference is the electrical boundary seen by the utility. In the first two architectures, each campus remains an AC-facing load with its own grid-interfacing converter behaviour. In the proposed architecture, the AC grid sees one controlled converter terminal, while campus converters are DC/DC devices embedded behind a shared DC backbone. This turns a cluster of AI campuses from a set of distributed harmonic and ramp sources into a coordinated DC-native load pocket.
 
 This architecture definition fixes the useful 800 VDC boundary across all cases, so later comparisons attribute changes to the grid-interface placement rather than to different delivered computational power."""),
-("Transfer capacity is coupled to loss reduction", """For a central reference case, we model a 1 GW cluster served over a 20 km reinforced subtransmission corridor. The traditional AC case uses 138 kV line-to-line at 0.98 power factor; the proposed DC case uses a +/-138 kV bipole, or 276 kV pole-to-pole. This is a representative voltage class rather than a prescribed standard. We define useful transfer capacity as the MW delivered to the common 800 VDC load boundary under the same grid-side input limit.
+("DC conversion increases corridor transfer capacity", """The first benefit is corridor transfer capacity. For a 138 kV AC reference corridor, the AC thermal transfer limit is $P_{\\mathrm{AC}}=\\sqrt{3}V_{\\mathrm{LL}}I_{\\max}\\mathrm{pf}$. A bipolar DC corridor using the same current envelope has $P_{\\mathrm{DC}}=2V_{\\mathrm{pole}}I_{\\max}k_I$, where $V_{\\mathrm{pole}}$ is the pole-to-ground DC voltage and $k_I$ is the retained current capability after conversion. This comparison holds current and right-of-way use explicit rather than asking how much extra load can be served from small efficiency differences.
 
-At the grid input required for traditional AC to serve 1 GW, the local-SST case delivers 12.2 MW more useful load and the DC backbone delivers 13.0 MW more useful load to the 800 VDC boundary (Fig. 2a). The same calculation gives total losses of 39.1 MW for traditional AC, 26.5 MW for local SSTs and 25.7 MW for the DC backbone at a 1 GW load point. The corresponding end-to-end efficiencies are 96.23%, 97.42% and 97.49%. A separate 99.0% local-SST efficiency sensitivity gives 21.3 MW loss, 97.92% end-to-end efficiency and 17.3 MW useful transfer gain at the same grid input; this is treated only as a sensitivity case, not as a demonstrated reference architecture.
+In the central 138 kV, 3.2 kA, pf = 0.98 reference calculation, traditional AC provides 0.75 GW of corridor transfer capacity. A conservative +/-138 kV DC case provides 0.88 GW, or a 1.18x multiplier. A high-voltage DC envelope sets the DC pole voltage to 1.5 times the AC line-to-ground peak voltage, giving approximately +/-169 kV and 1.08 GW, or a 1.44x multiplier (Fig. 2a). This envelope follows an EPRI-reported observation for AC-to-DC overhead-line conversion, and an external UltraNet conversion reference reports an approximately 40% capacity increase for one converted 380 kV circuit on a hybrid AC/DC tower [13].
 
-This transfer-capacity result is not a separate claim from loss reduction. It is the useful-load consequence of delivering the same computational boundary through a lower-loss corridor and conversion chain. Under the 99.0% local-SST sensitivity case, local conversion can exceed the DC backbone in pure efficiency. The architectural case emerges because the DC backbone gives a transfer-capacity gain over traditional AC in the same direction as harmonic ownership and dynamic-voltage benefits. A load-distance sweep from 100 MW to 3 GW and from 5 to 100 km shows where the DC useful-transfer gain over traditional AC exceeds 10, 50 and 100 MW (Fig. 2c). A Monte Carlo uncertainty sweep and one-at-a-time tornado analysis show that corridor length, conductor resistance and downstream conversion assumptions dominate the quantitative result (Fig. 2b,d).
-
-The transfer-capacity conclusion is therefore supported by closed-form loss equations, a load-distance design sweep, Monte Carlo uncertainty and a one-at-a-time sensitivity screen rather than by a single reference operating point."""),
+This calculation is not a claim that every 138 kV corridor can operate at the high-voltage DC envelope. Re-insulation, clearances, electric-field effects, corona, grounding, live-working clearances, terminal converter ratings and permitting must be checked for a specific corridor. The point is that the AC/DC boundary changes the transfer-capacity envelope available from a corridor. Across 8000 Monte Carlo samples of voltage-envelope factor, AC power factor, retained DC current and converter-rating cap, the median high-voltage DC capacity increase is in the tens-of-percent range, and the one-at-a-time sensitivity screen shows that voltage envelope and retained DC current dominate the result (Fig. 2c,d). Current-limit scaling then translates the same multiplier into absolute MW for candidate 138 kV corridors (Fig. 2b)."""),
 ("A DC backbone changes harmonic compliance into harmonic ownership", """Traditional AC and local-SST architectures can be designed to meet harmonic limits, but they place multiple large AC-facing converter interfaces along the corridor. Their aggregate harmonic voltage distortion depends on local filters, network impedance, cable capacitance, phase relationships between sites and resonance. The proposed DC backbone concentrates the AC-facing converter at a single utility-operated terminal. Campus stations are DC/DC interfaces and therefore do not directly inject AC harmonics into the subtransmission grid.
 
 We quantify this ownership change with an OpenDSS-ready network and a reproduced nodal frequency-domain solver. The network uses a 10 GVA Thevenin short-circuit strength at 138 kV, three campus buses along a 20 km corridor, harmonic-dependent source impedance and resonance amplification around selected orders. Distributed architectures are represented by three AC-facing converter spectra with random relative phases; the DC-backbone case is represented by one filtered grid-facing converter terminal.
 
-For the central assumptions, the 95th-percentile PCC voltage THD is 3.95% for traditional AC, 1.55% for local SSTs and 0.78% for the DC backbone (Fig. 3b). Adding active filtering or storage to the traditional AC case improves the metric, and coordinated control improves the local-SST case, but neither changes the number of AC-facing interfaces. These values are screening metrics, not a substitute for project-specific IEEE 519 compliance studies [13]. Their purpose is narrower and architectural: moving DC upstream changes a distributed compliance problem into a single utility-owned terminal design problem.
+For the central assumptions, the 95th-percentile PCC voltage THD is 3.95% for traditional AC, 1.55% for local SSTs and 0.78% for the DC backbone (Fig. 3b). Adding active filtering or storage to the traditional AC case improves the metric, and coordinated control improves the local-SST case, but neither changes the number of AC-facing interfaces. These values are screening metrics, not a substitute for project-specific IEEE 519 compliance studies [14]. Their purpose is narrower and architectural: moving DC upstream changes a distributed compliance problem into a single utility-owned terminal design problem.
 
 The harmonic result is supported by both an OpenDSS-compatible network description and an independent nodal frequency-domain solver using the same equivalent circuit and converter spectra."""),
 ("The DC backbone buffers voltage turbulence at a controllable boundary", """The third benefit is voltage ride-through under transmission-side voltage turbulence. We use the Travis 150 GridPACK event sweep to represent the disturbance source, pass the bus-150 POI voltage traces through a 20 ms HELICS/OpenDSS exchange, and compare the data-center boundary response for the three supply architectures (Fig. 4). This replaces the earlier averaged voltage-fluctuation figure with the same dynamic disturbance chain used in the Travis 150 validation.
@@ -1303,42 +1331,42 @@ The harmonic result is supported by both an OpenDSS-compatible network descripti
 The voltage-control structure differs across cases. C1 exposes the data-center boundary directly to the AC disturbance. C2 adds local SST Volt-VAR support near the campus, but the local controller reaches its reactive-power limit in the severe branch-fault sweep. C3 places the voltage-control responsibility at the centralized AC/DC terminal and represents a DC-buffer layer behind that terminal. For the lowest-POI event in the sweep, the bus-150 voltage reaches 0.092 pu. C1 and C2 trip, while C3 keeps the 800 VDC data-center boundary served in the modeled control architecture.
 
 This is still a screening result, not a hardware controller validation. Its purpose is to show where the disturbance is handled. The centralized DC case does not make the transmission-side event disappear; it changes the grid-facing boundary from multiple campus interfaces to one utility terminal with a represented DC-buffer layer."""),
-("Data-center load pockets are becoming planning objects", """The proposed architecture is motivated by load pockets that are large, concentrated and data-center driven. Public planning documents for the San Jose area show a load pocket growing from approximately 2.1 GW in an earlier study case to 3.4 GW in a later base case and 4.2 GW in a sensitivity case (Fig. 5a) [14-17]. This paper does not claim that a specific planned HVDC project is a 138 kV DC AI-factory backbone. The point is that data-center-driven load pockets are already large enough to motivate controllable transmission solutions.
+("Data-center load pockets are becoming planning objects", """The proposed architecture is motivated by load pockets that are large, concentrated and data-center driven. Public planning documents for the San Jose area show a load pocket growing from approximately 2.1 GW in an earlier study case to 3.4 GW in a later base case and 4.2 GW in a sensitivity case (Fig. 5a) [15-18]. This paper does not claim that a specific planned HVDC project is a 138 kV DC AI-factory backbone. The point is that data-center-driven load pockets are already large enough to motivate controllable transmission solutions.
 
 This section is used only to establish planning relevance from public documents; it is not used as routing evidence for the Travis synthetic case or as a claim about any specific project.
 
 The voltage-class envelope in Fig. 5b shows why the paper uses +/-138 kV only as a representative subtransmission design point. At 1 GW, +/-138 kV corresponds to approximately 3.6 kA bipole current. Higher multi-GW corridors move naturally toward higher voltage classes such as +/-320 kV. The relevant design variable is therefore not one fixed voltage, but the relocation of the AC/DC boundary to a voltage class compatible with load, distance, current limit, insulation and protection requirements."""),
-("Travis 150 greenfield configurations preserve the three-benefit ordering", """We next use the TAMU Travis 150 synthetic electric case as a Texas load-pocket test bed (Fig. 6). TAMU describes the case as a 150-bus synthetic electric system corresponding to the Austin-Travis County T&D system and states that it is synthetic, not an actual grid [18]. We ignore the companion gas network. ERCOT long-term planning materials are used only as regional motivation for large-load growth and transmission-planning context, not as routing data [19].
+("Travis 150 greenfield configurations preserve the three-benefit ordering", """We next use the TAMU Travis 150 synthetic electric case as a Texas load-pocket test bed (Fig. 6). TAMU describes the case as a 150-bus synthetic electric system corresponding to the Austin-Travis County T&D system and states that it is synthetic, not an actual grid [19]. We ignore the companion gas network. ERCOT long-term planning materials are used only as regional motivation for large-load growth and transmission-planning context, not as routing data [20].
 
 The Travis study adds new data-center supply systems rather than converting existing AC lines. C1 is a new traditional AC data-center supply ending at 480 V AC facility distribution. C2 keeps a new AC corridor but places an SST at the data-center side, with local dynamic VAR support on the 34.5 kV AC side and an 800 VDC data-center boundary. C3 builds a new dedicated bipolar DC corridor with a centralized grid-facing AC/DC terminal and DC/DC conversion near the campus. At the 1 GW data-center load, the useful transfer limit is 1.17 GW for C1, 1.24 GW for C2 and 1.44 GW for C3, giving C3 a 22.8% transfer increase relative to C1 and 16.7% relative to C2. The 95th-percentile THDv screen follows the same ordering: 1.67% for C1, 0.53% for C2 and 0.08% for C3.
 
 For voltage ride-through, we couple the Travis 150 GridPACK dynamic case to an OpenDSS data-center feeder through HELICS. The transmission side uses a GridPACK-compatible Travis 150 RAW/DYR dynamic deck. We apply six short branch-fault events on the 137-150 transmission branch as shifted 3 s GridPACK simulations so that bus-150 POI voltage observations can be passed to the distribution federation. Across the event sweep, the POI reaches 0.091994 pu. C1 and C2 trip under these severe disturbances; the C2 local VAR controller reaches its reactive-power limit but cannot prevent the 800 VDC boundary from collapsing in these runs. C3 keeps the 800 VDC data-center boundary served in the modeled C3 control architecture because the disturbance is handled at the centralized AC/DC terminal and represented DC-buffer layer. The GridPACK traces are generated from the Travis 150 RAW/DYR case, the bus-150 POI voltage traces are passed to the HELICS/OpenDSS federation at 20 ms resolution, and all OpenDSS solves converge in the event sweep. The result supports the architectural conclusion and also exposes the main local-control risk: local VAR devices can interact with utility LTCs, voltage regulators, capacitor banks, smart inverters or centralized STATCOM/SVC controls unless supervised coordination is added.""")]
 
-discussion = """This study reframes AI-factory power delivery as a grid-interface placement problem. The central result is that moving the AC/DC boundary from the facility to the subtransmission corridor co-locates three system benefits: higher useful transfer with lower losses relative to traditional AC, centralized harmonic ownership and dynamic voltage buffering. The result does not imply that every data center should be served by DC subtransmission, or that +/-138 kV is a universal optimum; it shows that once AI factories become clustered, synchronized and DC-native, the location of the AC/DC boundary becomes a planning variable.
+discussion = """This study reframes AI-factory power delivery as a grid-interface placement problem. The central result is that moving the AC/DC boundary from the facility to the subtransmission corridor co-locates three system benefits: higher corridor transfer capacity, centralized harmonic ownership and dynamic voltage buffering. The result does not imply that every data center should be served by DC subtransmission, or that +/-138 kV is a universal optimum; it shows that once AI factories become clustered, synchronized and DC-native, the location of the AC/DC boundary becomes a planning variable.
 
 The comparison also shows why efficiency alone is an incomplete criterion. A high-efficiency local-SST sensitivity case can approach or exceed the DC backbone in pure efficiency, but it does not change the architecture. Local SSTs retain multiple AC-facing grid interfaces and do not automatically provide a shared DC layer for buffering synchronized multi-campus load dynamics. The proposed backbone is valuable because the three benefits are co-located at one controllable boundary.
 
 The Travis 150 result strengthens this conclusion only as a reproducible test-bed result. It is not a site-selection claim, a real Austin routing study or a reconstruction of an operational disturbance. Its value is that the same C1-C2-C3 ordering appears when the architectures are implemented as new data-center supply systems on a synthetic Austin-Travis electric case and then stressed through an installed GridPACK/HELICS/OpenDSS branch-fault workflow. The result also clarifies the disadvantage of the local approach. A local SST VAR controller can improve a static screen, but in a severe sag it may saturate; without supervisory coordination it may also fight nearby smart inverters, substation load-tap changers, capacitor banks, line regulators or centralized STATCOM/SVC controls on different time scales.
 
-Several technical risks remain. DC protection, pole-to-ground fault detection, hybrid DC breakers, grounding, insulation coordination, converter interoperability and electromagnetic-transient stability must be demonstrated before deployment. These risks are the same DC-grid feasibility, protection and converter-interoperability questions identified in HVDC-grid and DC/DC-converter guidance [20-22]. We include protection-screening dynamics and an averaged EMT model to make the research boundary explicit, but do not claim a finished hardware design. The decisive follow-up is pilot-grade EMT and hardware-in-the-loop validation of the grid-facing terminal, DC/DC stations and AI-load emulator.
+Several technical risks remain. DC protection, pole-to-ground fault detection, hybrid DC breakers, grounding, insulation coordination, converter interoperability and electromagnetic-transient stability must be demonstrated before deployment. These risks are the same DC-grid feasibility, protection and converter-interoperability questions identified in HVDC-grid and DC/DC-converter guidance [21-23]. We include protection-screening dynamics and an averaged EMT model to make the research boundary explicit, but do not claim a finished hardware design. The decisive follow-up is pilot-grade EMT and hardware-in-the-loop validation of the grid-facing terminal, DC/DC stations and AI-load emulator.
 
-This study reframes AI factories as grid-planning objects rather than only building loads. The central claim is falsifiable: if a multi-campus AI load can be served by a subtransmission DC backbone, then the same upstream DC boundary should simultaneously reduce corridor/conversion losses relative to traditional AC, centralize AC harmonic ownership and reduce sub-synchronous grid-side voltage modulation relative to architectures that keep AC in the corridor. The models and repository are provided to make that claim testable."""
+This study reframes AI factories as grid-planning objects rather than only building loads. The central claim is falsifiable: if a multi-campus AI load can be served by a subtransmission DC backbone, then the same upstream DC boundary should simultaneously increase corridor transfer capacity relative to traditional AC, centralize AC harmonic ownership and reduce sub-synchronous grid-side voltage modulation relative to architectures that keep AC in the corridor. The models and repository are provided to make that claim testable."""
 
 methods = [
-("Architecture boundary and scenario definitions", """The evaluation boundary begins at the grid-facing/subtransmission supply point and ends at the 800 VDC data-center interface. The traditional AC case uses a 138 kV AC corridor and downstream AC distribution before conversion to 800 VDC. The local-SST case uses the same AC corridor but converts at each campus using an SST. The proposed case uses a grid-facing AC/DC terminal, a bipolar subtransmission DC corridor, DC/DC conversion to a 34.5 kV DC distribution layer and DC/DC conversion to 800 VDC. The DC/DC interface assumptions are architecture-level abstractions of HVDC-to-MVDC conversion functions studied for DC grids [22]. The central reference system is a 1 GW three-campus cluster served over a 20 km equivalent corridor. The DC design point is +/-138 kV, or 276 kV pole-to-pole."""),
-("Corridor efficiency and uncertainty model", """For AC cases, the receiving-end corridor power is P_recv = P/eta_downstream, where P is the useful 800 VDC load and eta_downstream is the downstream conversion efficiency. Corridor current is I_AC = P_recv/(sqrt(3) V_LL pf), AC line loss is 3 I_AC^2 R, grid input is P_recv plus line loss, and total loss is grid input minus P. For the DC case, receiving-end corridor power is P_recv = P/(eta_DC/DC,1 eta_DC/DC,2), bipole current is I_DC = P_recv/V_pp, line loss is 2 I_DC^2 R, grid input is (P_recv plus line loss)/eta_AC/DC, and total loss is grid input minus P. Central assumptions and the 99.0% local-SST efficiency sensitivity case are listed in Supplementary Table 1, and uncertainty ranges are encoded in the public repository."""),
+("Architecture boundary and scenario definitions", """The evaluation boundary begins at the grid-facing/subtransmission supply point and ends at the 800 VDC data-center interface. The traditional AC case uses a 138 kV AC corridor and downstream AC distribution before conversion to 800 VDC. The local-SST case uses the same AC corridor but converts at each campus using an SST. The proposed case uses a grid-facing AC/DC terminal, a bipolar subtransmission DC corridor, DC/DC conversion to a 34.5 kV DC distribution layer and DC/DC conversion to 800 VDC. The DC/DC interface assumptions are architecture-level abstractions of HVDC-to-MVDC conversion functions studied for DC grids [23]. The central transfer-capacity reference uses a 138 kV AC line-to-line corridor, 3.2 kA current limit and 0.98 AC power factor. Conservative DC uses +/-138 kV. The high-voltage DC envelope uses the EPRI-reported observation that DC pole voltage can reach up to 1.5 times AC line-to-ground peak voltage, giving approximately +/-169 kV for a 138 kV AC class [13]."""),
+("Corridor transfer-capacity and uncertainty model", """For the AC corridor, maximum active transfer is $P_{\\mathrm{AC,max}}=\\sqrt{3}V_{\\mathrm{LL}}I_{\\max}\\mathrm{pf}$, where $V_{\\mathrm{LL}}$ is AC line-to-line voltage, $I_{\\max}$ is the current limit and pf is power factor. The AC line-to-ground peak voltage is $V_{\\mathrm{LG,peak}}=\\sqrt{2/3}V_{\\mathrm{LL}}$. For the bipolar DC corridor, maximum transfer is $P_{\\mathrm{DC,max}}=\\min(2V_{\\mathrm{pole}}I_{\\max}k_I,P_{\\mathrm{converter}})$, where $V_{\\mathrm{pole}}=\\alpha V_{\\mathrm{LG,peak}}$, $k_I$ is the retained current capability after AC-to-DC conversion and $P_{\\mathrm{converter}}$ is the terminal converter-rating cap. The reported multiplier is $P_{\\mathrm{DC,max}}/P_{\\mathrm{AC,max}}$. The Monte Carlo uncertainty sweep uses 8000 samples drawn from triangular distributions for $\\alpha$, pf, $k_I$, current limit and converter-rating cap; the source-data table records every sampled value and resulting multiplier. The one-at-a-time sensitivity screen varies $\\alpha$, pf, $k_I$ and converter cap around the high-voltage DC reference point."""),
 ("Harmonic screening model and OpenDSS cross-check", """The harmonic model is a frequency-domain screening model. It represents the 138 kV grid by a 10 GVA Thevenin short-circuit strength, three corridor buses and harmonic-dependent source impedance with resonance amplification. OpenDSS-compatible circuit files and archived OpenDSSDirect.py harmonic-run artifacts are included in the repository. The figure-generation script also includes an independent nodal-frequency solver that uses the same equivalent network and harmonic spectra, so the screening result can be reproduced without a proprietary EMT tool. The output metrics are PCC voltage THD and individual harmonic voltage distortion. Parameter provenance is summarized in Supplementary Table 1; measured literature values, public planning data and study assumptions are separated in the public data tables."""),
-("Averaged EMT-style dynamic buffering model", """The dynamic waveform is synthetic but parameterized from the published structure of AI training power traces: compute phases with high accelerator utilization, periodic communication dips and less frequent checkpointing dips [12]. The traditional AC case passes the waveform directly to the grid. The local-SST case applies a 1.1 s first-order smoothing function. The DC-backbone case applies a 16 s grid-facing power command; the difference between the AI load and the commanded grid power defines shared DC-buffer power. The dynamic robustness grid repeats this averaged model across campus count N = 1, 3, 6 and 10; cluster load P = 0.25, 1, 2 and 4.5 GW; voltage class 69, 138, 230 and 320 kV; short-circuit ratio Ssc/P = 3, 5, 10 and 20; random, partial and coherent temporal phase alignment; and corridor lengths of 5, 20, 50 and 100 km. Supplementary Note 2 gives the averaged state equations and validates the first-order command model by time-step convergence and transfer-function tests. The voltage and spectral metrics are screening proxies aligned with voltage-fluctuation and interconnection-oscillation concerns [23,24]. This is an averaged EMT-style comparison of architecture-level exposure, not a switching EMT validation of a specific converter design."""),
+("Averaged EMT-style dynamic buffering model", """The dynamic waveform is synthetic but parameterized from the published structure of AI training power traces: compute phases with high accelerator utilization, periodic communication dips and less frequent checkpointing dips [12]. The traditional AC case passes the waveform directly to the grid. The local-SST case applies a 1.1 s first-order smoothing function. The DC-backbone case applies a 16 s grid-facing power command; the difference between the AI load and the commanded grid power defines shared DC-buffer power. The dynamic robustness grid repeats this averaged model across campus count N = 1, 3, 6 and 10; cluster load P = 0.25, 1, 2 and 4.5 GW; voltage class 69, 138, 230 and 320 kV; short-circuit ratio Ssc/P = 3, 5, 10 and 20; random, partial and coherent temporal phase alignment; and corridor lengths of 5, 20, 50 and 100 km. Supplementary Note 2 gives the averaged state equations and validates the first-order command model by time-step convergence and transfer-function tests. The voltage and spectral metrics are screening proxies aligned with voltage-fluctuation and interconnection-oscillation concerns [24,25]. This is an averaged EMT-style comparison of architecture-level exposure, not a switching EMT validation of a specific converter design."""),
 ("Travis 150 GridPACK/HELICS/OpenDSS co-simulation", """The Travis 150 study uses the electric side of the TAMU synthetic gas-electric Travis 150 case and ignores the 47-node gas network. The importer accepts a downloaded PowerWorld AUX electric case through the --travis-case option and falls back to the repository's Austin/Travis synthetic corridor candidates when the external file is absent. The flagship data-center corridor is treated as a new build and the data-center load is incremental to native Travis load. In the AUX-based run, closed high-voltage candidate branches are ranked by source strength, load-pocket suitability, transfer and converter headroom and corridor length; the selected span is from 163 Decker Creek Power Plant 1 to 147 Travis_DS_127 1, approximately 9.64 km at 230 kV. The archived fallback placement is B_04 to B_101. The reported sensitivities use 250 MW, 500 MW and 1 GW loads; the main text reports the 1 GW case.
 
 C1 is modelled as a new AC data-center corridor ending at a 480 V AC facility-distribution boundary. C2 uses a new AC corridor with an SST at the data-center side, local dynamic VAR support at the 34.5 kV AC side and an 800 VDC load boundary. C3 uses a new dedicated bipolar DC data-center corridor, a grid-facing AC/DC terminal, DC/DC conversion near the campus and an 800 VDC load boundary. Transfer capacity is the maximum useful data-center MW before the first thermal, converter, voltage, reactive-power or stability screen violation. Harmonic metrics use the same ownership distinction as the main harmonic model but are scaled to the Travis corridor short-circuit strength and incremental data-center load.
 
 The T&D dynamic run uses HELICS to exchange a GridPACK transmission POI voltage trajectory with an OpenDSS data-center feeder and a controller federate. The transmission side uses a GridPACK-compatible Travis 150 RAW/DYR dynamic deck archived with the reproducibility package. Bus 150 is used as the POI voltage observation, and the disturbance is a set of six short branch faults on the 137-150 transmission branch. The GridPACK Python stepwise observation API initializes one event at a time, so the six XML events are run as independent shifted 3 s simulations for the event sweep. The resulting 20 ms bus-150 POI voltage traces are passed to the HELICS/OpenDSS distribution federation. Across the sweep, the lowest observed POI voltage is 0.091994 pu. The controller federate implements C2 local 34.5 kV VAR support and C3 centralized AC/DC-terminal support and DC-buffer ride-through. Trip logic flags an AC-side trip when voltage remains below 0.50 pu for at least 0.04 s. The run manifests record installed-tool versions and convergence flags."""),
-("Protection-zone screening", """Representative protection dynamics are simulated for a backbone pole-to-ground fault and a campus DC/DC internal fault. The model includes detection, converter current limiting, breaker opening, section isolation and healthy-campus re-energization. It is intended to check plausibility and expose the required protection functions identified in DC-grid protection studies [20,21]; it is not a validated DC-breaker or insulation-coordination design.""")]
+("Protection-zone screening", """Representative protection dynamics are simulated for a backbone pole-to-ground fault and a campus DC/DC internal fault. The model includes detection, converter current limiting, breaker opening, section isolation and healthy-campus re-energization. It is intended to check plausibility and expose the required protection functions identified in DC-grid protection studies [21,22]; it is not a validated DC-breaker or insulation-coordination design.""")]
 
 figure_legends = {
 'Fig. 1 | Delivery architectures.':'The three supply architectures place the grid-facing AC/DC boundary at different locations. a, Traditional AC delivery keeps AC through the subtransmission corridor and campus switchyards before facility-level conversion. b, Local SST delivery keeps the AC corridor but converts at each campus through a local solid-state transformer. c, The proposed architecture moves the AC/DC boundary upstream to a centralized utility terminal and serves campuses through a subtransmission DC backbone and local DC/DC conversion.',
-'Fig. 2 | Useful transfer capacity.':'a, Central 1 GW, 20 km reference-case useful transfer gain when all architectures are constrained to the same grid-side input required for traditional AC to serve 1 GW; loss annotations report the corresponding 1 GW loss point. b, Monte Carlo uncertainty in useful transfer gain relative to traditional AC at the reference point. c, Load-distance sweep showing where the DC-backbone useful-transfer gain over traditional AC exceeds 10, 50 and 100 MW. d, One-at-a-time sensitivity of the central transfer gain. A 99.0% local-SST efficiency sensitivity case is reported in the text and Supplementary Table 1.',
+'Fig. 2 | Corridor transfer capacity.':'a, Normalized transfer-capacity multiplier for a 138 kV AC reference corridor, a conservative +/-138 kV DC corridor and a high-voltage DC envelope; the dashed line marks the reported UltraNet conversion reference. b, Absolute transfer capacity versus current limit for the same 138 kV class. c, Monte Carlo uncertainty in high-voltage DC capacity increase using sampled voltage-envelope factor, AC power factor, retained DC current and converter-rating cap. d, One-at-a-time sensitivity of the high-voltage DC multiplier.',
 'Fig. 3 | Harmonic ownership.':'a, Harmonic ownership boundary for distributed AC-facing converter cases versus the proposed single utility AC/DC terminal. b, Monte Carlo PCC voltage THD for the three architectures and two stronger baselines, with a 5% planning guide shown for context. c, 95th-percentile individual harmonic voltage distortion. d, Direct OpenDSS harmonic solve compared with the internal nodal-frequency solver.',
 'Fig. 4 | GridPACK voltage ride-through.':'a, Coupling structure used to pass the GridPACK branch-fault POI voltage trace through the HELICS/OpenDSS data-center feeder and scenario control layer. b, Six shifted GridPACK branch-fault POI voltage traces at bus 150; the highlighted trace is the lowest-POI event. c, Data-center load-boundary voltage response for C1, C2 and C3 in the highlighted event. C1 and C2 trip in the severe disturbance, whereas C3 remains served in the modeled centralized-terminal and DC-buffer architecture.',
 'Fig. 5 | Load-pocket context.':'a, CAISO San Jose area planning data showing a public multi-GW load-pocket precedent. b, Single-bipole current as a function of cluster load for candidate DC voltage classes; the 1 GW reference point and 3.4-4.2 GW public planning precedent show why voltage class, circuit count or both must scale with load.',
@@ -1363,6 +1391,7 @@ references = [
 "Samanta, S., Wong, I., Bhattacharya, S. & Pahl, B. Medium voltage supply directly to data-center-servers using SiC-based single-stage converter with 20 kW experimental results. In 2020 IEEE Energy Conversion Congress and Exposition (ECCE), 2006-2012 (IEEE, 2020). https://doi.org/10.1109/ECCE44975.2020.9235701.",
 "She, X., Huang, A. Q. & Burgos, R. Review of solid-state transformer technologies and their application in power distribution systems. IEEE J. Emerg. Sel. Top. Power Electron. 1, 186-198 (2013). https://doi.org/10.1109/JESTPE.2013.2277917.",
 "Choukse, E. et al. Power stabilization for AI training datacenters. arXiv:2508.14318v2 (2025). https://arxiv.org/abs/2508.14318.",
+"Adapa, R. AC Line Conversion to DC. HVDC Tech Transfer for PG&E, Electric Power Research Institute (30 April 2026).",
 "IEEE Standards Association. IEEE Std 519-2022: IEEE recommended practice and requirements for harmonic control in electric power systems (IEEE, 2022).",
 "California ISO. San Jose Area Transmission Plan: decision on modifications to the 2021-2022 transmission plan study (5 November 2024); https://www.caiso.com/documents/decision-on-modifications-to-the-2021-2022-transmission-plan-study-nov-2024.pdf (accessed 27 May 2026).",
 "California ISO. 2024-2025 Transmission Planning Process: Board Approved Transmission Plan Posted (30 May 2025); https://www.caiso.com/notices/2024-2025-transmission-planning-process-board-approved-transmission-plan-posted (accessed 27 May 2026).",
@@ -1382,7 +1411,7 @@ main_md += 'Zhengjie Yang^1,*^ and Liang Min^1,*^\n\n^1^ Stanford University, St
 main_md += '## Abstract\n' + abstract + '\n\n'
 main_md += '## Introduction\n' + intro + '\n\n'
 main_md += '## Results\n\n'
-main_md += 'We test the boundary-placement claim through six linked analyses: architecture definition, corridor-loss accounting, harmonic ownership, dynamic buffering, public load-pocket context and a Travis 150 GridPACK/HELICS/OpenDSS validation case. The purpose is not to optimize one corridor design, but to test whether the same C1-C2-C3 ordering appears across independent electrical metrics.\n\n'
+main_md += 'We test the boundary-placement claim through six linked analyses: architecture definition, corridor transfer-capacity modeling, harmonic ownership, dynamic buffering, public load-pocket context and a Travis 150 GridPACK/HELICS/OpenDSS validation case. The purpose is not to optimize one corridor design, but to test whether the same C1-C2-C3 ordering appears across independent electrical metrics.\n\n'
 for h,txt in results_sections: main_md += f'### {h}\n{txt}\n\n'
 main_md += '## Discussion\n' + discussion + '\n\n'
 main_md += '## Methods\n\n'
@@ -1433,7 +1462,7 @@ See data/assumption_provenance_table_v3.csv.
 
 ![Shared buffer feasibility layers](../figures/shared_buffer_feasibility.png)
 
-**Supplementary Fig. S4 | Cost and conductor envelope.** Annual value of loss reduction under electricity-price and load-factor sweeps, and a current-length index for corridor conductor burden.
+**Supplementary Fig. S4 | Cost and conductor envelope.** Operating-cost screen under electricity-price and load-factor sweeps, and a current-length index for corridor conductor burden.
 
 ![Cost and conductor envelope](../figures/cost_copper_envelope.png)
 """
@@ -1445,7 +1474,11 @@ prov=pd.DataFrame([
     {'parameter':'Reference corridor length','value':'20 km equivalent corridor','role':'central reference case','source':'this study'},
     {'parameter':'Reference AC voltage','value':'138 kV line-to-line','role':'representative subtransmission voltage','source':'this study'},
     {'parameter':'Reference AC power factor','value':'0.98','role':'central AC-current assumption','source':'this study'},
-    {'parameter':'Reference DC voltage','value':'+/-138 kV, or 276 kV pole-to-pole','role':'representative DC design point','source':'this study'},
+    {'parameter':'Reference corridor current limit','value':'3.2 kA','role':'central transfer-capacity assumption','source':'this study'},
+    {'parameter':'Conservative DC voltage','value':'+/-138 kV, or 276 kV pole-to-pole','role':'conservative DC transfer-capacity case','source':'this study'},
+    {'parameter':'High-voltage DC envelope','value':'1.5 x AC line-to-ground peak, about +/-169 kV for 138 kV AC','role':'high-voltage DC transfer-capacity case','source':'Adapa 2026'},
+    {'parameter':'Retained DC current factor','value':'1.0 central; 0.95-1.0 Monte Carlo range','role':'AC-to-DC conversion current-retention screen','source':'this study'},
+    {'parameter':'Converter-rating cap','value':'2.0 x AC reference central; 1.30-2.0 Monte Carlo range','role':'terminal converter headroom screen','source':'this study'},
     {'parameter':'Conductor resistance','value':'0.01 ohm/km per phase or pole','role':'screening assumption','source':'this study'},
     {'parameter':'Traditional downstream efficiency','value':'0.991 x 0.982 = 97.32%','role':'central loss assumption','source':'this study'},
     {'parameter':'Local SST efficiency','value':'98.5%','role':'central local-SST assumption','source':'this study'},
@@ -1521,7 +1554,7 @@ def create_main_docx():
     for idx,(h,txt) in enumerate(results_sections[1:], start=2):
         doc.add_heading(h,level=2)
         for para in txt.split('\n\n'): add_para(doc,para)
-        fpath={2:'transfer_capacity_loss_designspace.png',3:'harmonic_ownership_opendss_screening.png',4:'gridpack_voltage_ride_through.png',5:'load_pocket_voltage_envelope.png',6:'travis150_greenfield_benefits.png'}[idx]
+        fpath={2:'corridor_transfer_capacity.png',3:'harmonic_ownership_opendss_screening.png',4:'gridpack_voltage_ride_through.png',5:'load_pocket_voltage_envelope.png',6:'travis150_greenfield_benefits.png'}[idx]
         cap_key=list(figure_legends.keys())[idx-1]
         add_fig(doc, FIG/fpath, cap_key+' '+figure_legends[cap_key])
     doc.add_heading('Discussion',level=1)
@@ -1568,7 +1601,7 @@ def create_supp_docx():
     doc.add_heading('Supplementary Note 4. Buffer and economics interpretation',level=1)
     add_para(doc,'The reference buffer requirement is high power and low energy. It can be met only by coordinated layers: GPU power smoothing, rack or row storage, supercapacitors, converter DC-link energy and station-level storage. The cost/copper envelope is a first-order screen and is not a capital-cost estimate.')
     add_fig(doc, FIG/'shared_buffer_feasibility.png', 'Supplementary Fig. S3 | Shared-buffer interpretation. Candidate technologies and deployment layers for high-power, low-energy buffering.')
-    add_fig(doc, FIG/'cost_copper_envelope.png', 'Supplementary Fig. S4 | Cost and conductor envelope. Annual value of loss reduction and current-length index for corridor conductor burden.')
+    add_fig(doc, FIG/'cost_copper_envelope.png', 'Supplementary Fig. S4 | Cost and conductor envelope. Operating-cost screen and current-length index for corridor conductor burden.')
     doc.add_heading('Supplementary Note 5. Travis 150 greenfield dynamic workflow',level=1)
     add_para(doc,'The Travis 150 analysis uses only the synthetic electric case. The companion gas network is ignored. The C1, C2 and C3 systems are new data-center supply configurations, not conversions of existing AC lines. The dynamic workflow uses the archived GridPACK-compatible Travis 150 RAW/DYR deck and the exported bus-150 POI voltage traces from six shifted branch-fault simulations.')
     out=SUPP/'Supplementary_Information_NComms_2026-06-26.docx'; doc.save(out); return out
@@ -1654,9 +1687,9 @@ cover_letter = """Dear Editors,
 
 We are pleased to submit "Direct-current subtransmission backbones for grid-stable AI factories" for consideration as an Article in Nature Communications.
 
-AI data centers are becoming synchronized, DC-native, gigawatt-scale loads, but grid planning still often treats them as passive AC facilities. This manuscript asks where the AC/DC boundary should sit when the useful facility boundary is 800 VDC. We compare traditional AC delivery, local solid-state-transformer delivery and a utility-operated subtransmission DC backbone.
+Conventional data centers have largely been planned as alternating-current (AC)-supplied, mostly passive loads. AI factories are different: they are becoming geographically clustered, synchronized and direct-current (DC)-native, with emerging 800 VDC distribution architectures moving the useful computational boundary away from conventional facility AC delivery. This manuscript asks where the AC/DC boundary should sit when the useful load boundary is DC. We compare traditional AC delivery, local solid-state-transformer interfaces and a utility-operated subtransmission DC backbone.
 
-The main contribution is a falsifiable architecture-level claim: moving the AC/DC boundary upstream can co-locate three benefits that are usually studied separately. In the reference and Travis 150 greenfield studies, the DC-corridor architecture increases useful transfer capacity, centralizes AC-side harmonic ownership and improves voltage ride-through in a GridPACK/HELICS/OpenDSS branch-fault event sweep. The Travis 150 analysis is explicitly framed as a synthetic test-bed result rather than a site-selection or real-routing claim.
+The main contribution is a falsifiable architecture-level claim: moving the AC/DC boundary upstream can co-locate three benefits that are usually studied separately. In the reference and Travis 150 greenfield studies, the DC-corridor architecture increases corridor transfer capacity, centralizes AC-side harmonic ownership and improves voltage ride-through in a GridPACK/HELICS/OpenDSS branch-fault event sweep. The Travis 150 analysis is explicitly framed as a synthetic test-bed result rather than a site-selection or real-routing claim.
 
 The manuscript includes all figure source data, a reproducibility archive, OpenDSS-compatible harmonic files, a Travis 150 greenfield screening workflow and a documented GridPACK/HELICS/OpenDSS dynamic workflow using the real Travis 150 RAW/DYR case. We believe the work will interest Nature Communications readers working across power systems, power electronics, grid planning and AI infrastructure.
 
@@ -1764,7 +1797,7 @@ def create_tex_pdf_package():
 
     figure_after = [
         ('An AI-native architecture with the AC/DC boundary moved upstream', 'AI-factory delivery architectures', 'ai_factory_delivery_architectures.png'),
-        ('Transfer capacity is coupled to loss reduction', 'Transfer capacity and loss design space', 'transfer_capacity_loss_designspace.png'),
+        ('DC conversion increases corridor transfer capacity', 'Corridor transfer-capacity envelope', 'corridor_transfer_capacity.png'),
         ('A DC backbone changes harmonic compliance into harmonic ownership', 'Harmonic ownership at the AC grid interface', 'harmonic_ownership_opendss_screening.png'),
         ('The DC backbone buffers voltage turbulence at a controllable boundary', 'GridPACK voltage ride-through under transmission faults', 'gridpack_voltage_ride_through.png'),
         ('Data-center load pockets are becoming planning objects', 'Load-pocket voltage and conductor context', 'load_pocket_voltage_envelope.png'),
@@ -1952,6 +1985,9 @@ if (source_scripts/'run_true_opendss.py').exists():
     def note():
         return 'Use this module for the transparent nodal frequency-domain solver. OpenDSS-compatible files are in opendss/.'
 '''))
+source_transfer_capacity = SOURCE_ROOT/'src'/'ai_dc_backbone'/'transfer_capacity.py'
+if source_transfer_capacity.exists():
+    shutil.copy(source_transfer_capacity, REPO/'src'/'ai_dc_backbone'/'transfer_capacity.py')
 for helper in ['reproduce_all.py','dynamic_robustness_sweep.py','harmonic_robustness_sweep.py','travis150_greenfield_c1_c2_c3.py','run_gridpack_td_dynamic_var.py','run_griddyn_td_dynamic_var.py']:
     source_helper=Path(__file__).resolve().with_name(helper)
     if source_helper.exists():
@@ -2126,15 +2162,15 @@ if not (REPO/'scripts'/'reproduce_all.py').exists():
     Final figure files:
 
     - Fig. 1: `figures/ai_factory_delivery_architectures.png`
-    - Fig. 2: `figures/transfer_capacity_loss_designspace.{png,svg}`
-    - Fig. 3: `figures/harmonic_ownership_opendss_screening.{png,svg}`
-    - Fig. 4: `figures/gridpack_voltage_ride_through.{png,svg}`
-    - Fig. 5: `figures/load_pocket_voltage_envelope.{png,svg}`
+    - Fig. 2: `figures/corridor_transfer_capacity.{png,svg,pdf}`
+    - Fig. 3: `figures/harmonic_ownership_opendss_screening.{png,svg,pdf}`
+    - Fig. 4: `figures/gridpack_voltage_ride_through.{png,svg,pdf}`
+    - Fig. 5: `figures/load_pocket_voltage_envelope.{png,svg,pdf}`
     - Fig. 6: `figures/travis150_greenfield_benefits.{png,svg,pdf}`
-    - Supplementary Fig. S1: `figures/dc_fault_protection_dynamic.{png,svg}`
-    - Supplementary Fig. S2: `figures/averaged_emt_validation.{png,svg}`
-    - Supplementary Fig. S3: `figures/shared_buffer_feasibility.{png,svg}`
-    - Supplementary Fig. S4: `figures/cost_copper_envelope.{png,svg}`
+    - Supplementary Fig. S1: `figures/dc_fault_protection_dynamic.{png,svg,pdf}`
+    - Supplementary Fig. S2: `figures/averaged_emt_validation.{png,svg,pdf}`
+    - Supplementary Fig. S3: `figures/shared_buffer_feasibility.{png,svg,pdf}`
+    - Supplementary Fig. S4: `figures/cost_copper_envelope.{png,svg,pdf}`
 ''').lstrip())
 (REPO/'docs'/'ai_assisted_drafting_disclosure.md').write_text(textwrap.dedent(f'''
     # AI-assisted drafting disclosure

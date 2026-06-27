@@ -3,7 +3,11 @@ Reference useful load,1 GW at the 800 VDC interface,central reference case,this 
 Reference corridor length,20 km equivalent corridor,central reference case,this study
 Reference AC voltage,138 kV line-to-line,representative subtransmission voltage,this study
 Reference AC power factor,0.98,central AC-current assumption,this study
-Reference DC voltage,"+/-138 kV, or 276 kV pole-to-pole",representative DC design point,this study
+Reference corridor current limit,3.2 kA,central transfer-capacity assumption,this study
+Conservative DC voltage,"+/-138 kV, or 276 kV pole-to-pole",conservative DC transfer-capacity case,this study
+High-voltage DC envelope,"1.5 x AC line-to-ground peak, about +/-169 kV for 138 kV AC",high-voltage DC transfer-capacity case,Adapa 2026
+Retained DC current factor,1.0 central; 0.95-1.0 Monte Carlo range,AC-to-DC conversion current-retention screen,this study
+Converter-rating cap,2.0 x AC reference central; 1.30-2.0 Monte Carlo range,terminal converter headroom screen,this study
 Conductor resistance,0.01 ohm/km per phase or pole,screening assumption,this study
 Traditional downstream efficiency,0.991 x 0.982 = 97.32%,central loss assumption,this study
 Local SST efficiency,98.5%,central local-SST assumption,this study

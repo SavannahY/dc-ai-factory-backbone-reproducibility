@@ -4,14 +4,12 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 
 def test_transfer_capacity_reference_case_ordering():
-    df = pd.read_csv(ROOT / "data" / "transfer_capacity_reference_case_v3.csv", index_col=0)
-    assert (
-        df.loc["Subtransmission DC backbone", "transfer_gain_vs_traditional_MW"]
-        > df.loc["Local SST", "transfer_gain_vs_traditional_MW"]
-        > df.loc["Traditional AC", "transfer_gain_vs_traditional_MW"]
-    )
-    assert df.loc["Subtransmission DC backbone", "eff"] > df.loc["Traditional AC", "eff"]
-    assert df.loc["Local SST", "eff"] > df.loc["Traditional AC", "eff"]
+    df = pd.read_csv(ROOT / "data" / "transfer_capacity_reference_case_v3.csv")
+    cases = df.set_index("architecture")
+    assert cases.loc["Traditional AC", "capacity_multiplier_vs_ac"] == 1.0
+    assert round(cases.loc["Conservative DC", "capacity_multiplier_vs_ac"], 2) == 1.18
+    assert round(cases.loc["High-voltage DC", "capacity_multiplier_vs_ac"], 2) == 1.44
+    assert cases.loc["High-voltage DC", "transfer_capacity_MW"] > cases.loc["Conservative DC", "transfer_capacity_MW"]
 
 def test_true_opendss_harmonic_ordering():
     df = pd.read_csv(ROOT / "data" / "true_opendss_harmonic_thdv_monte_carlo_v3.csv")
