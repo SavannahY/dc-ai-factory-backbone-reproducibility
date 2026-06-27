@@ -805,7 +805,7 @@ def figure2():
     ax.tick_params(axis='y',pad=2)
     ax.set_xlabel('DC transfer gain vs traditional AC (MW)'); ax.set_title('d  Sensitivity',loc='left',fontsize=11,weight='bold'); ax.grid(axis='x',alpha=0.25)
     fig.subplots_adjust(left=0.07,right=0.98,bottom=0.08,top=0.93,wspace=0.44,hspace=0.38)
-    savefig(fig,'fig2_transfer_capacity_loss_designspace_v3')
+    savefig(fig,'fig2_transfer_capacity_loss_designspace')
 figure2()
 
 # Figure 3
@@ -866,7 +866,7 @@ def figure3():
     ax.set_ylabel('95th percentile THD (%)')
     ax.set_title('d  Direct OpenDSS check',loc='left',fontsize=11,weight='bold')
     ax.legend(fontsize=7,frameon=False); ax.grid(axis='y',alpha=0.25)
-    fig.tight_layout(); savefig(fig,'fig3_harmonic_ownership_opendss_screening_v3')
+    fig.tight_layout(); savefig(fig,'fig3_harmonic_ownership_opendss_screening')
 figure3()
 
 # Figure 4
@@ -955,7 +955,7 @@ def figure4():
                          fontsize=6.9,color=colors_v[scen],ha='left',va='top')
     ax_boundary.legend(fontsize=6.3,frameon=False,loc='lower right')
     ax_boundary.grid(alpha=0.25)
-    savefig(fig,'fig4_voltage_control_turbulence_gridpack_v3')
+    savefig(fig,'fig4_voltage_control_turbulence_gridpack')
 figure4()
 
 # Figure 5
@@ -1002,7 +1002,7 @@ def figure5():
     ax.text(3.48,8.8,'multi-GW range needs\nhigher voltage, parallel bipoles\nor both',fontsize=7.2,color='0.25',ha='left')
     ax.set_xlabel('Cluster load (GW)'); ax.set_ylabel('Single-bipole current (kA)'); ax.set_xlim(0,5.25); ax.set_ylim(0,37.5)
     ax.set_title('b  Voltage envelope',loc='left',fontsize=10,weight='bold'); ax.legend(fontsize=7,frameon=False,loc='upper left'); ax.grid(alpha=0.22)
-    fig.tight_layout(); savefig(fig,'fig5_case_study_voltage_envelope_v3')
+    fig.tight_layout(); savefig(fig,'fig5_case_study_voltage_envelope')
 figure5()
 
 def load_travis_greenfield_outputs():
@@ -1158,7 +1158,7 @@ def figure6():
     ax.legend(fontsize=6.4, frameon=False, loc='upper left')
     ax.grid(axis='y', alpha=0.25)
 
-    savefig(fig, 'fig6_travis150_greenfield_benefits_v2')
+    savefig(fig, 'fig6_travis150_greenfield_benefits')
 figure6()
 
 # Supplementary figures: S1 protection dynamics, S2 EMT validation, S3 buffer feasibility, S4 economics/copper
@@ -1189,7 +1189,7 @@ def figure_s1():
     ax.plot(fault_df.time_s*1000,fault_df.campus2_voltage_pu,label='healthy campus 2',color='#31a354')
     ax.plot(fault_df.time_s*1000,fault_df.campus3_voltage_pu,label='healthy campus 3',color='#756bb1')
     ax.set_xlabel('Time (ms)'); ax.set_ylabel('Campus DC voltage (pu)'); ax.legend(fontsize=7,frameon=False); ax.grid(alpha=0.25)
-    fig.tight_layout(); savefig(fig,'supp_fig_s1_dc_fault_protection_dynamic_v3')
+    fig.tight_layout(); savefig(fig,'supp_fig_s1_dc_fault_protection_dynamic')
 figure_s1()
 
 def figure_s2():
@@ -1202,7 +1202,7 @@ def figure_s2():
     ax.plot(tf_df.frequency_Hz,tf_df.simulated_gain,marker='o',label='simulation',color='#3182bd')
     ax.plot(tf_df.frequency_Hz,tf_df.theory_gain,'--',label='first-order theory',color='0.25')
     ax.set_xscale('log'); ax.set_yscale('log'); ax.set_xlabel('Frequency (Hz)'); ax.set_ylabel('Grid-command gain'); ax.set_title('b  Transfer function',loc='left',fontsize=10,weight='bold'); ax.legend(fontsize=7,frameon=False); ax.grid(alpha=0.25,which='both')
-    fig.tight_layout(); savefig(fig,'supp_fig_s2_averaged_emt_validation_v3')
+    fig.tight_layout(); savefig(fig,'supp_fig_s2_averaged_emt_validation')
 figure_s2()
 
 def figure_s3():
@@ -1235,7 +1235,7 @@ def figure_s3():
         ax2.text(0.55,y,textwrap.fill(r.role,38),fontsize=6.2,va='top')
         ax2.hlines(y-0.10,0.02,0.98,color='0.86',lw=0.7)
     fig.tight_layout()
-    savefig(fig,'supp_fig_s3_buffer_feasibility_v3')
+    savefig(fig,'supp_fig_s3_buffer_feasibility')
 figure_s3()
 
 def figure_s4():
@@ -1258,7 +1258,7 @@ def figure_s4():
         ax.text(i,v+2,f'{v:.0f}',ha='center',fontsize=7)
     ax.set_ylabel('Current-length index (kA km)'); ax.set_title('b  Current-length index',loc='left',fontsize=10,weight='bold'); ax.grid(axis='y',alpha=0.25)
     ax.text(0.03,0.90,'index = current x corridor length',transform=ax.transAxes,fontsize=6.8,va='top',color='0.35')
-    fig.tight_layout(); savefig(fig,'supp_fig_s4_cost_copper_envelope_v3')
+    fig.tight_layout(); savefig(fig,'supp_fig_s4_cost_copper_envelope')
 figure_s4()
 
 # ---------------------------- Manuscript text ----------------------------
@@ -1513,7 +1513,7 @@ def create_main_docx():
     for idx,(h,txt) in enumerate(results_sections[1:], start=2):
         doc.add_heading(h,level=2)
         for para in txt.split('\n\n'): add_para(doc,para)
-        fpath={2:'fig2_transfer_capacity_loss_designspace_v3.png',3:'fig3_harmonic_ownership_opendss_screening_v3.png',4:'fig4_voltage_control_turbulence_gridpack_v3.png',5:'fig5_case_study_voltage_envelope_v3.png',6:'fig6_travis150_greenfield_benefits_v2.png'}[idx]
+        fpath={2:'fig2_transfer_capacity_loss_designspace.png',3:'fig3_harmonic_ownership_opendss_screening.png',4:'fig4_voltage_control_turbulence_gridpack.png',5:'fig5_case_study_voltage_envelope.png',6:'fig6_travis150_greenfield_benefits.png'}[idx]
         cap_key=list(figure_legends.keys())[idx-1]
         add_fig(doc, FIG/fpath, cap_key+' '+figure_legends[cap_key])
     doc.add_heading('Discussion',level=1)
@@ -1553,14 +1553,14 @@ def create_supp_docx():
         for i,k in enumerate(['parameter','value','role','source']): cells[i].text=str(row[k])
     doc.add_heading('Supplementary Note 2. Averaged EMT equations and validation',level=1)
     add_para(doc,'The dynamic model is an averaged, architecture-level representation. The AI load is P_L(t). The grid-facing command P_g follows dP_g/dt = (P_L - P_g)/tau. The shared buffer power is P_b = P_L - P_g, and the buffer energy state is the time integral of P_b. The scenario grid varies campus count, cluster load, voltage class, short-circuit ratio, temporal phase coherence and corridor length. The voltage proxy combines grid-stiffness and corridor-voltage factors. These equations compare exposure between architectures and are not a replacement for switching EMT models.')
-    add_fig(doc, FIG/'supp_fig_s2_averaged_emt_validation_v3.png', 'Supplementary Fig. S2 | Dynamic-screen checks. Time-step convergence and first-order transfer-function validation for the supplemental grid-command model.')
+    add_fig(doc, FIG/'supp_fig_s2_averaged_emt_validation.png', 'Supplementary Fig. S2 | Dynamic-screen checks. Time-step convergence and first-order transfer-function validation for the supplemental grid-command model.')
     doc.add_heading('Supplementary Note 3. Protection-zone screening',level=1)
     add_para(doc,'The DC protection study represents detection, converter current limiting, breaker opening, section isolation and re-energization. It is included to expose the functions required by the architecture. It does not specify breaker hardware, insulation coordination or a validated relay scheme.')
-    add_fig(doc, FIG/'supp_fig_s1_dc_fault_protection_dynamic_v3.png', 'Supplementary Fig. S1 | Protection screening. Representative protection zones and dynamic response to a backbone pole-to-ground fault.')
+    add_fig(doc, FIG/'supp_fig_s1_dc_fault_protection_dynamic.png', 'Supplementary Fig. S1 | Protection screening. Representative protection zones and dynamic response to a backbone pole-to-ground fault.')
     doc.add_heading('Supplementary Note 4. Buffer and economics interpretation',level=1)
     add_para(doc,'The reference buffer requirement is high power and low energy. It can be met only by coordinated layers: GPU power smoothing, rack or row storage, supercapacitors, converter DC-link energy and station-level storage. The cost/copper envelope is a first-order screen and is not a capital-cost estimate.')
-    add_fig(doc, FIG/'supp_fig_s3_buffer_feasibility_v3.png', 'Supplementary Fig. S3 | Shared-buffer interpretation. Candidate technologies and deployment layers for high-power, low-energy buffering.')
-    add_fig(doc, FIG/'supp_fig_s4_cost_copper_envelope_v3.png', 'Supplementary Fig. S4 | Cost and conductor envelope. Annual value of loss reduction and current-length index for corridor conductor burden.')
+    add_fig(doc, FIG/'supp_fig_s3_buffer_feasibility.png', 'Supplementary Fig. S3 | Shared-buffer interpretation. Candidate technologies and deployment layers for high-power, low-energy buffering.')
+    add_fig(doc, FIG/'supp_fig_s4_cost_copper_envelope.png', 'Supplementary Fig. S4 | Cost and conductor envelope. Annual value of loss reduction and current-length index for corridor conductor burden.')
     doc.add_heading('Supplementary Note 5. Travis 150 greenfield dynamic workflow',level=1)
     add_para(doc,'The Travis 150 analysis uses only the synthetic electric case. The companion gas network is ignored. The C1, C2 and C3 systems are new data-center supply configurations, not conversions of existing AC lines. The dynamic workflow uses the archived GridPACK-compatible Travis 150 RAW/DYR deck and the exported bus-150 POI voltage traces from six shifted branch-fault simulations.')
     out=SUPP/'Supplementary_Information_NComms_2026-06-26.docx'; doc.save(out); return out
@@ -1680,11 +1680,11 @@ def create_tex_pdf_package():
 
     figure_after = [
         ('An AI-native architecture with the AC/DC boundary moved upstream', 'Fig. 1', 'Figure_1_architecture.png'),
-        ('Transfer capacity is coupled to loss reduction', 'Fig. 2', 'fig2_transfer_capacity_loss_designspace_v3.png'),
-        ('A DC backbone changes harmonic compliance into harmonic ownership', 'Fig. 3', 'fig3_harmonic_ownership_opendss_screening_v3.png'),
-        ('The DC backbone buffers voltage turbulence at a controllable boundary', 'Fig. 4', 'fig4_voltage_control_turbulence_gridpack_v3.png'),
-        ('Data-center load pockets are becoming planning objects', 'Fig. 5', 'fig5_case_study_voltage_envelope_v3.png'),
-        ('Travis 150 greenfield configurations preserve the three-benefit ordering', 'Fig. 6', 'fig6_travis150_greenfield_benefits_v2.png'),
+        ('Transfer capacity is coupled to loss reduction', 'Fig. 2', 'fig2_transfer_capacity_loss_designspace.png'),
+        ('A DC backbone changes harmonic compliance into harmonic ownership', 'Fig. 3', 'fig3_harmonic_ownership_opendss_screening.png'),
+        ('The DC backbone buffers voltage turbulence at a controllable boundary', 'Fig. 4', 'fig4_voltage_control_turbulence_gridpack.png'),
+        ('Data-center load pockets are becoming planning objects', 'Fig. 5', 'fig5_case_study_voltage_envelope.png'),
+        ('Travis 150 greenfield configurations preserve the three-benefit ordering', 'Fig. 6', 'fig6_travis150_greenfield_benefits.png'),
     ]
 
     pdf_md = main_md_path.read_text(encoding='utf-8')
@@ -1994,15 +1994,15 @@ if not (REPO/'scripts'/'reproduce_all.py').exists():
     Final figure files:
 
     - Fig. 1: `figures/Figure_1_architecture.png`
-    - Fig. 2: `figures/fig2_transfer_capacity_loss_designspace_v3.{png,svg}`
-    - Fig. 3: `figures/fig3_harmonic_ownership_opendss_screening_v3.{png,svg}`
-    - Fig. 4: `figures/fig4_voltage_control_turbulence_gridpack_v3.{png,svg}`
-    - Fig. 5: `figures/fig5_case_study_voltage_envelope_v3.{png,svg}`
-    - Fig. 6: `figures/fig6_travis150_greenfield_benefits_v2.{png,svg}`
-    - Supplementary Fig. S1: `figures/supp_fig_s1_dc_fault_protection_dynamic_v3.{png,svg}`
-    - Supplementary Fig. S2: `figures/supp_fig_s2_averaged_emt_validation_v3.{png,svg}`
-    - Supplementary Fig. S3: `figures/supp_fig_s3_buffer_feasibility_v3.{png,svg}`
-    - Supplementary Fig. S4: `figures/supp_fig_s4_cost_copper_envelope_v3.{png,svg}`
+    - Fig. 2: `figures/fig2_transfer_capacity_loss_designspace.{png,svg}`
+    - Fig. 3: `figures/fig3_harmonic_ownership_opendss_screening.{png,svg}`
+    - Fig. 4: `figures/fig4_voltage_control_turbulence_gridpack.{png,svg}`
+    - Fig. 5: `figures/fig5_case_study_voltage_envelope.{png,svg}`
+    - Fig. 6: `figures/fig6_travis150_greenfield_benefits.{png,svg,pdf}`
+    - Supplementary Fig. S1: `figures/supp_fig_s1_dc_fault_protection_dynamic.{png,svg}`
+    - Supplementary Fig. S2: `figures/supp_fig_s2_averaged_emt_validation.{png,svg}`
+    - Supplementary Fig. S3: `figures/supp_fig_s3_buffer_feasibility.{png,svg}`
+    - Supplementary Fig. S4: `figures/supp_fig_s4_cost_copper_envelope.{png,svg}`
 ''').lstrip())
 (REPO/'docs'/'ai_assisted_drafting_disclosure.md').write_text(textwrap.dedent(f'''
     # AI-assisted drafting disclosure
